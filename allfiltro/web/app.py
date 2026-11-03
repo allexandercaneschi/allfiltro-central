@@ -257,7 +257,9 @@ def login(request: Request, login: str = Form(...), senha: str = Form(...)):
     if ip_novo:
         _alerta_ip_novo(u, auth.ip_cliente(request))
     r = RedirectResponse("/admin", status_code=303)
-    r.set_cookie(auth.COOKIE, token, httponly=True, secure=config().cookie_seguro, samesite="strict",
+    # Secure quando o acesso e por HTTPS (HAProxy); pela rede interna em http o cookie ainda funciona
+    r.set_cookie(auth.COOKIE, token, httponly=True, secure=config().cookie_seguro and auth.eh_https(request),
+                 samesite="strict",
                  path="/admin")
     return r
 

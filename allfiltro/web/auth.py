@@ -65,6 +65,20 @@ def ip_cliente(request: Request) -> str:
     return cadeia[0] if cadeia else direto
 
 
+def eh_https(request: Request) -> bool:
+    """HTTPS direto, ou HTTPS no HAProxy (X-Forwarded-Proto vindo de proxy confiavel)."""
+    if request.url.scheme == "https":
+        return True
+    cfg = config()
+    try:
+        direto = ipaddress.ip_address(request.client.host if request.client else "")
+    except ValueError:
+        return False
+    if not any(direto in r for r in cfg.proxies_confiaveis):
+        return False
+    return request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+
+
 def auditar(s, request: Request | None, usuario: str, acao: str, tabela: str = "", registro: str = "",
             antes=None, depois=None):
     s.add(Auditoria(usuario=usuario, ip=ip_cliente(request) if request else "", acao=acao, tabela=tabela,

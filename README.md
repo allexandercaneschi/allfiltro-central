@@ -127,6 +127,7 @@ http-request track-sc0 src if allfiltro allf_api or allfiltro allf_login
 http-request deny deny_status 429 if allfiltro allf_login { sc_http_req_rate(0) gt 20 }
 http-request deny deny_status 429 if allfiltro allf_api { sc_http_req_rate(0) gt 120 }
 http-request set-header X-Forwarded-For %[src]
+http-request set-header X-Forwarded-Proto https if { ssl_fc }
 timeout server 120s
 ```
 
