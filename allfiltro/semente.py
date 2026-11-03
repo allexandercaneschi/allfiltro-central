@@ -67,7 +67,19 @@ PROTEGIDOS_DOMINIOS = {
     "google.com": "Busca e login do Google (subdomínios como mail/drive seguem as categorias)",
     "accounts.google.com": "Login do Google",
     "*.gstatic.com": "Recursos de quase todo site",
-    "*.googleapis.com": "APIs usadas por sites e aplicativos",
+    # googleapis.com: so os servicos que sites e aplicativos usam; os buckets
+    # *.storage.googleapis.com hospedam golpes e podem entrar nas listas
+    "googleapis.com": "APIs do Google",
+    "www.googleapis.com": "APIs do Google",
+    "fonts.googleapis.com": "Fontes usadas por quase todo site",
+    "ajax.googleapis.com": "Bibliotecas usadas por sites",
+    "maps.googleapis.com": "Google Maps em sites e sistemas",
+    "storage.googleapis.com": "Armazenamento do Google (só o endereço principal)",
+    "oauth2.googleapis.com": "Login com Google",
+    "android.googleapis.com": "Serviços do Android",
+    "update.googleapis.com": "Atualização do Chrome",
+    "safebrowsing.googleapis.com": "Proteção contra golpes do navegador",
+    "content.googleapis.com": "APIs do Google",
     "microsoft.com": "Site da Microsoft",
     "login.microsoftonline.com": "Login Microsoft 365",
     "*.windowsupdate.com": "Windows Update",
@@ -102,8 +114,18 @@ PROTEGIDOS_IPS = {
 }
 
 
+# protegidos antigos da semente que foram trocados por outros
+SUBSTITUIDOS = {"*.googleapis.com": "APIs usadas por sites e aplicativos"}
+
+
 def semear(s) -> list:
     feito = []
+    for valor, motivo in SUBSTITUIDOS.items():
+        p = s.scalars(select(Protegido).where(Protegido.valor == valor)).first()
+        if p is not None and p.motivo == motivo:  # so se ninguem editou
+            s.delete(p)
+            feito.append(f"protegido {valor} substituido")
+    s.flush()
     existentes = {c.chave: c for c in s.scalars(select(Categoria)).all()}
     for chave, (nome, desc, _) in CATEGORIAS.items():
         if chave not in existentes:
@@ -112,7 +134,8 @@ def semear(s) -> list:
             existentes[chave] = c
             feito.append(f"categoria {chave}")
     s.flush()
-    ut1 = s.scalars(select(Fonte).where(Fonte.url == UT1_URL)).first()
+    # pela URL ou pelo nome: o tecnico pode trocar a URL (espelho) sem duplicar a fonte
+    ut1 = s.scalars(select(Fonte).where((Fonte.url == UT1_URL) | Fonte.nome.like("UT1%"))).first()
     if ut1 is None:
         ut1 = Fonte(nome="UT1 (Université Toulouse Capitole)", url=UT1_URL, formato="pacote", frequencia_h=24,
                     ativa=True, ultimo_status="", ultimo_sha256="", retrato_sha256="", baixar_agora=True)

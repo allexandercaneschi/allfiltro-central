@@ -14,7 +14,16 @@
   {% if pode_sistema %}<a href="/admin/sistema/versoes">Revisar e liberar</a>{% else %}Um administrador pode liberar na área de sistema.{% endif %}</div>
 {% endif %}{% endfor %}
 {% for f in fontes_erro %}<div class="aviso atencao"><b>Fonte {{ f.nome }}</b>: {{ f.ultimo_status }}</div>{% endfor %}
-{% for a in avisos %}<div class="aviso atencao">Categoria <b>{{ a.categoria }}</b>: {{ a.itens|num }} item(ns) {{ 'protegido(s)' if a.tipo == 'protegido' else 'em faixa de IP protegida' }} vindo(s) de fonte foram retirados ({{ a.exemplos|join(', ') }}{% if a.itens > a.exemplos|length %}, …{% endif %}).</div>{% endfor %}
+{% if avisos %}
+<details class="cartao">
+  <summary>Protegidos retirados das fontes nesta versão: {{ avisos|sum(attribute='itens')|num }} item(ns) em {{ avisos|map(attribute='categoria')|unique|list|length }} categoria(s)</summary>
+  <p class="suave pequeno">Itens que as fontes trouxeram mas estão em <a href="/admin/sistema/protegidos">Protegidos</a>; por isso ficaram fora das listas. É esperado em Atualizações e VPN (endereços que a ALL usa). Em outras categorias, confira se o protegido não está largo demais.</p>
+  <div class="rolagem"><table><thead><tr><th>Categoria</th><th class="num">Itens</th><th>Exemplos</th></tr></thead><tbody>
+  {% for a in avisos|sort(attribute='itens', reverse=True) %}<tr><td><a href="/admin/categorias/{{ a.categoria }}">{{ a.categoria }}</a>{% if a.tipo != 'protegido' %} <span class="etiqueta">IP</span>{% endif %}</td><td class="num">{{ a.itens|num }}</td>
+    <td class="suave pequeno quebra">{{ a.exemplos[:4]|join(', ') }}{% if a.itens > 4 %}, …{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+</details>
+{% endif %}
 
 <div class="grade">
   <div class="numero"><div class="rotulo">Categorias</div><div class="valor">{{ cats|length }}</div></div>
