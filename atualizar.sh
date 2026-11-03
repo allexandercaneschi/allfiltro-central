@@ -6,9 +6,9 @@ set -euo pipefail
 APP=/opt/allfiltro/app
 VENV=/opt/allfiltro/venv
 cd "$APP"
-antes=$(git rev-parse --short HEAD)
+antes=$(runuser -u allfiltro -- git rev-parse --short HEAD)
 runuser -u allfiltro -- git pull --ff-only -q
-depois=$(git rev-parse --short HEAD)
+depois=$(runuser -u allfiltro -- git rev-parse --short HEAD)
 runuser -u allfiltro -- "$VENV/bin/pip" install -q -r requirements.txt
 runuser -u allfiltro -- "$VENV/bin/alembic" -c alembic.ini upgrade head
 runuser -u allfiltro -- "$VENV/bin/python" -m allfiltro.cli semear
