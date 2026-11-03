@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}{% endblock %} · Central de Listas ALL Filtros</title>
+<link rel="icon" href="/static/favicon.ico">
+<link rel="stylesheet" href="/static/estilo.css?v={{ versao_app }}">
+</head>
+<body>
+{% if usuario %}
+<header class="topo">
+  <a class="marca" href="/admin"><img src="/static/icone.png" alt="">Central de Listas</a>
+  <nav>
+    {% set itens = [("/admin", "Início"), ("/admin/buscar", "Domínios e IPs"), ("/admin/categorias", "Categorias")] %}
+    {% for url, nome in itens %}<a href="{{ url }}" class="{{ 'ativo' if caminho == url or (url != '/admin' and caminho.startswith(url)) }}">{{ nome }}</a>{% endfor %}
+    {% if pode_sistema %}<span class="sep"></span>
+    {% set sis = [("/admin/sistema/fontes", "Fontes"), ("/admin/sistema/versoes", "Versões"), ("/admin/sistema/protegidos", "Protegidos"), ("/admin/sistema/usuarios", "Usuários"), ("/admin/sistema/auditoria", "Auditoria")] %}
+    {% for url, nome in sis %}<a href="{{ url }}" class="{{ 'ativo' if caminho.startswith(url) }}">{{ nome }}</a>{% endfor %}
+    {% endif %}
+  </nav>
+  <div class="quem"><span>{{ usuario.nome }}</span>
+    <form method="post" action="/admin/sair"><button class="botao pequeno" type="submit">Sair</button></form>
+  </div>
+</header>
+{% endif %}
+<main>
+{% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}
+{% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
+{% block corpo %}{% endblock %}
+</main>
+<div class="rodape">Central de Listas ALL Filtros {{ versao_app }} · ALL Tecnologias · Apache 2.0</div>
+</body>
+</html>

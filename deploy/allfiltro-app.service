@@ -1,0 +1,21 @@
+[Unit]
+Description=Central de Listas ALL Filtros - app (painel e API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=allfiltro
+Group=allfiltro
+WorkingDirectory=/opt/allfiltro/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/allfiltro/venv/bin/uvicorn allfiltro.web.app:app --host 127.0.0.1 --port 8001 --workers 2 --no-server-header --log-level warning
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/allfiltro
+
+[Install]
+WantedBy=multi-user.target

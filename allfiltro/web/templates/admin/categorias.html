@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Categorias{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Categorias</h1><p class="suave mb0">A chave é o que o pfSense usa nas políticas; o nome é o que aparece para o técnico e na página de bloqueio.</p></div></div>
+<div class="cartao rolagem">
+<table><thead><tr><th>Categoria</th><th>Chave</th><th>Fontes</th><th class="num">Manuais</th><th class="num">Domínios</th><th class="num">IPs</th></tr></thead><tbody>
+{% for c in cats %}{% set t = totais.get(c.chave) %}<tr>
+  <td><a href="/admin/categorias/{{ c.chave }}">{{ c.nome }}</a>{% if not c.ativa %} <span class="etiqueta">desativada</span>{% endif %}{% if c.tipo == 'privada' %} <span class="etiqueta azul">privada</span>{% endif %}</td>
+  <td><code>{{ c.chave }}</code></td>
+  <td class="suave pequeno">{{ (fontes_por_cat.get(c.id) or ['só manual'])|join(', ') }}</td>
+  <td class="num">{{ manuais.get(c.id, 0)|num }}</td>
+  <td class="num">{{ (t.dominios.itens if t else 0)|num }}</td><td class="num">{{ (t.ips.itens if t else 0)|num }}</td></tr>
+{% endfor %}</tbody></table>
+</div>
+<details class="cartao"><summary>Criar categoria</summary>
+<form method="post" action="/admin/categorias"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="nova" value="1">
+  <div class="linha"><div class="campo"><label>Chave (fixa, minúsculas e hífen)</label><input type="text" name="chave" required pattern="[a-z0-9][a-z0-9-]{1,78}" placeholder="bets-brasileiras"></div>
+    <div class="campo"><label>Nome</label><input type="text" name="nome" required placeholder="Bets brasileiras"></div></div>
+  <div class="campo"><label>Descrição</label><input type="text" name="descricao"></div>
+  <button class="botao primario" type="submit">Criar</button>
+</form></details>
+{% endblock %}

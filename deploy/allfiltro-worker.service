@@ -1,0 +1,18 @@
+[Unit]
+Description=Central de Listas ALL Filtros - worker (fontes e versoes)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=allfiltro
+Group=allfiltro
+WorkingDirectory=/opt/allfiltro/app
+UMask=0022
+ExecStart=/opt/allfiltro/venv/bin/python -m allfiltro.cli ciclo
+TimeoutStartSec=1h
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/allfiltro

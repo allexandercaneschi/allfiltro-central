@@ -1,0 +1,10 @@
+[Unit]
+Description=Central de Listas ALL Filtros - ciclo a cada minuto
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

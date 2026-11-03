@@ -1,0 +1,145 @@
+# Central de Listas ALL Filtros
+
+**ALL Tecnologias** · licença Apache 2.0
+
+O único servidor de listas do [ALL Filtros](https://alltecnologias.com.br): junta listas prontas (UT1 e outras), domínios e IPs incluídos à mão e categorias próprias da ALL, e entrega tudo pronto, assinado, para os pfSense dos clientes.
+
+A central **não bloqueia nem libera nada**. Ela só diz quais domínios e IPs pertencem a cada categoria; o que bloquear, para qual rede e em qual horário é a política do ALL Filtros em cada firewall.
+
+```
+Internet ─► HAProxy do escritório (HTTPS/ACME, ACLs, limite por IP)
+              └─► LXC Debian 13
+                    ├─ Apache        /static do disco; /, /admin e /api → app; listas via X-Sendfile
+                    ├─ app           FastAPI + Jinja2 (uvicorn em 127.0.0.1:8001, systemd)
+                    ├─ worker        timer de 1 min: baixa fontes vencidas e gera versão se algo mudou
+                    └─ /srv/allfiltro/{fontes,versoes}
+              └─► VM PostgreSQL: banco "listas"
+```
+
+## Instalar (Debian 13, como root)
+
+Antes, na VM do PostgreSQL, libere o LXC no `pg_hba.conf` e recarregue (`SELECT pg_reload_conf();`):
+
+```
+host  listas  allfiltro  <IP do LXC>/32  scram-sha-256
+```
+
+No LXC:
+
+```sh
+apt-get install -y git
+git clone https://github.com/allexandercaneschi/allfiltro-central.git /root/allfiltro-central
+bash /root/allfiltro-central/instalar.sh --banco 172.16.0.242 --proxy 172.16.0.254 --admin allexander
+```
+
+O instalador pede só o que é segredo: a senha do `postgres` (uma vez, para criar o usuário `allfiltro` e o banco `listas`) e a senha do primeiro admin. Nenhuma das duas fica gravada. A senha do banco da central é gerada na hora e fica só em `/etc/allfiltro/allfiltro.conf`.
+
+Depois:
+- guarde uma cópia de `/etc/allfiltro/ed25519.pem` no RDM (sem ela, os firewalls não reconhecem uma central reinstalada);
+- no HAProxy: `allfiltro.alltecnologias.com.br` → `http://<IP do LXC>:80`, com as regras abaixo.
+
+## Atualizar
+
+Snapshot do LXC no Proxmox e depois `bash /opt/allfiltro/app/atualizar.sh`.
+
+## Comandos
+
+```sh
+cd /opt/allfiltro/app
+runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli status
+runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli publicar     # gera versão agora
+runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli ativar 42    # libera travada / volta versão
+runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli criar-admin LOGIN "Nome"
+journalctl -fu allfiltro-worker     # downloads e versões
+journalctl -fu allfiltro-app        # painel e API
+```
+
+## Painel (`/admin`)
+
+| Tela | Para quê |
+|---|---|
+| **Início** | Versão ativa, totais, fontes com erro, versões travadas, protegidos barrados, firewalls sem consultar há 48 h. Botão **Publicar agora** |
+| **Domínios e IPs** | Busca um site/IP: em quais categorias está, por causa de qual domínio pai, de qual fonte veio e as entradas manuais. Incluir, retirar, desfazer, importar em massa |
+| **Categorias** | Lista com totais e origens; criar, renomear, desativar |
+| **Fontes** *(sistema)* | URL, formato, frequência, mapeamento lista da fonte → categoria, baixar agora |
+| **Versões** *(sistema)* | Histórico; liberar versão travada; voltar para uma anterior |
+| **Protegidos** *(sistema)* | O que fonte nenhuma pode colocar em categoria |
+| **Usuários** / **Auditoria** *(sistema)* | Técnicos e admins; quem fez o quê, quando e de onde |
+
+Técnico: busca, inclui, retira e publica. Admin: também a área de sistema, que só abre das redes de `redes_sistema` (em `/etc/allfiltro/allfiltro.conf`).
+
+## Como uma categoria é montada
+
+```
+fontes mapeadas − protegidos − retirados à mão + incluídos à mão
+```
+
+- **Domínio vale para os subdomínios.** A versão publicada remove os subdomínios já cobertos pelo pai (`espn.com` + `foo.espn.com` → `espn.com`): o firewall recebe a menor lista que bloqueia a mesma coisa.
+- **Pouca memória.** A montagem é toda em disco (`sort` em arquivo, uma passada): a UT1 Adulto (~5 milhões de domínios) não entra inteira na memória, nem aqui nem, no futuro, no pfSense.
+- **Retirar** um subdomínio cujo pai continua na categoria não tem efeito, e o painel avisa. Incluir à mão vence retirar e protegido.
+- **Protegidos:** `*.gov.br` protege o domínio e todos os subdomínios; `google.com` protege só ele (assim `mail.google.com` ainda pode entrar em *E-mail pela web*). Faixas privadas e reservadas de IP também são protegidas.
+- **Travas:** categoria que cresce ou encolhe mais de 30% **e** mais de 500 itens por mudança de fonte não é ativada; a versão fica *travada*, a anterior continua valendo e o Início mostra o alerta. Entradas manuais não passam por essa trava. A primeira carga de uma categoria vazia também não.
+- **Fonte com erro** (HTTP ≠ 200, vazia, formato estranho) mantém o último retrato válido e tenta de novo a cada 30 min.
+- Uma categoria que não mudou é reaproveitada da versão anterior (hard link), então gerar versão é rápido.
+
+## Contrato com o pfSense
+
+| Requisição | O que faz |
+|---|---|
+| `GET /api/v1/manifest` | Manifesto da versão ativa (JSON). `ETag` → `304` sem mudança. Assinatura Ed25519 em base64 no cabeçalho `X-Assinatura-Ed25519` |
+| `GET /api/v1/manifest.sig` | A mesma assinatura, em texto (para quem não lê cabeçalhos) |
+| `GET /api/v1/cat/<chave>/dominios.txt.gz` | Domínios da categoria (`?v=N` para uma versão específica) |
+| `GET /api/v1/cat/<chave>/ips.txt.gz` | IPs e faixas |
+| `GET /api/v1/chave-publica` | Chave pública (PEM) — vai embutida no pacote |
+| `GET /api/v1/licenca` | Fase 2 |
+
+Cabeçalhos do pfSense: `Authorization: Bearer <chave>` (opcional por enquanto), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel.
+
+Arquivos: um item por linha, minúsculo, LF, UTF-8, gzip determinístico (o mesmo conteúdo sempre tem o mesmo sha256). Domínios sem `www.` e com acento em punycode; IPs como endereço ou CIDR.
+
+Conferência no pfSense (o PHP do pfSense não tem sodium; o `openssl` de linha de comando tem Ed25519):
+
+```sh
+openssl pkeyutl -verify -rawin -pubin -inkey central.pub -in manifest.json -sigfile manifest.sig
+sha256 -q dominios.txt.gz    # igual ao sha256 do manifesto
+```
+
+Exemplo de manifesto:
+
+```json
+{"categorias":{"esportes":{"descricao":"Sites de esportes e resultados","dominios":{"bytes":1234,"itens":5321,
+ "sha256":"…","url":"/api/v1/cat/esportes/dominios.txt.gz"},"ips":{"bytes":20,"itens":0,"sha256":"…",
+ "url":"/api/v1/cat/esportes/ips.txt.gz"},"nome":"Esportes","tipo":"publica"}},"central":"https://allfiltro.alltecnologias.com.br",
+ "cliente":null,"formato":1,"gerado_em":"2026-11-03T18:00:00+00:00","versao":42}
+```
+
+## HAProxy (sugestão)
+
+```
+acl allfiltro       hdr(host) -i allfiltro.alltecnologias.com.br
+acl allf_api        path_beg /api/
+acl allf_login      path /admin/login
+acl allf_sistema    path_beg /admin/sistema
+acl rede_all        src 172.16.0.0/22 10.8.0.0/24          # escritório e VPN
+http-request deny if allfiltro allf_sistema !rede_all       # quando quiser fechar
+stick-table type ip size 100k expire 10m store http_req_rate(1m)
+http-request track-sc0 src if allfiltro allf_api or allfiltro allf_login
+http-request deny deny_status 429 if allfiltro allf_login { sc_http_req_rate(0) gt 20 }
+http-request deny deny_status 429 if allfiltro allf_api { sc_http_req_rate(0) gt 120 }
+http-request set-header X-Forwarded-For %[src]
+timeout server 120s
+```
+
+## Diferenças do briefing
+
+- O retrato das fontes fica em arquivos ordenados (`/srv/allfiltro/fontes`), não na tabela `itens_fonte`: milhões de linhas por download não cabem bem no banco e, em arquivo, a busca é binária e a montagem usa pouca memória.
+- Apache com `mod_xsendfile` no lugar do nginx; LXC com systemd no lugar do stack do Portainer.
+- Painel em Jinja2 sem HTMX (formulários simples; nenhum script externo).
+
+## Desenvolvimento
+
+```sh
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
+ALLFILTRO_CONF=./teste.conf .venv/bin/alembic upgrade head
+PYTHONPATH=. .venv/bin/pytest -q tests
+```

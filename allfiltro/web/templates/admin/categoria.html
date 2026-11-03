@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}{{ c.nome }}{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>{{ c.nome }}</h1><p class="suave mb0"><code>{{ c.chave }}</code> · {{ c.descricao }}</p></div>
+  <a class="botao" href="/admin/categorias">Todas as categorias</a></div>
+<div class="grade">
+  <div class="numero"><div class="rotulo">Domínios (versão {{ versao.versao if versao else '—' }})</div><div class="valor">{{ (info.dominios.itens if info else 0)|num }}</div></div>
+  <div class="numero"><div class="rotulo">IPs e faixas</div><div class="valor">{{ (info.ips.itens if info else 0)|num }}</div></div>
+  <div class="numero"><div class="rotulo">Entradas manuais ativas</div><div class="valor">{{ ents|selectattr('ativa')|list|length }}</div></div>
+</div>
+<div class="grade-2">
+<div class="cartao"><h2>Fontes</h2>
+  {% if maps %}<table><tbody>{% for m, f in maps %}<tr><td>{{ f.nome }}</td><td class="suave">{{ m.categoria_origem or 'lista inteira' }}</td></tr>{% endfor %}</tbody></table>
+  {% else %}<p class="suave mb0">Só entradas manuais.</p>{% endif %}
+  {% if info %}<p class="suave pequeno mt mb0">sha256 dos domínios: <code class="quebra">{{ info.dominios.sha256 }}</code></p>{% endif %}
+</div>
+<div class="cartao"><h2>Editar</h2>
+<form method="post" action="/admin/categorias"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="chave" value="{{ c.chave }}">
+  <div class="campo"><label>Nome</label><input type="text" name="nome" value="{{ c.nome }}" required></div>
+  <div class="campo"><label>Descrição</label><input type="text" name="descricao" value="{{ c.descricao }}"></div>
+  <label class="check"><input type="checkbox" name="ativa" value="1" {{ 'checked' if c.ativa }}> Ativa (desativada some do manifesto)</label>
+  <button class="botao primario mt" type="submit">Salvar</button>
+</form></div>
+</div>
+<div class="cartao rolagem"><h2>Entradas manuais</h2>
+<table><thead><tr><th>Valor</th><th>Operação</th><th>Quem / quando</th><th></th></tr></thead><tbody>
+{% for e in ents %}<tr><td><a href="/admin/buscar?q={{ e.valor|urlencode }}"><code>{{ e.valor }}</code></a>{% if e.comentario %}<div class="suave pequeno">{{ e.comentario }}</div>{% endif %}</td>
+  <td><span class="etiqueta {{ 'ok' if e.operacao == 'incluir' else 'erro' }}">{{ e.operacao }}</span>{% if not e.ativa %} <span class="etiqueta">desfeita</span>{% endif %}</td>
+  <td class="suave pequeno">{{ e.autor }}<br>{{ e.criado_em|data }}</td>
+  <td class="direita">{% if e.ativa %}<form class="inline" method="post" action="/admin/entradas/{{ e.id }}/desfazer"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar" value="/admin/categorias/{{ c.chave }}"><button class="botao pequeno" type="submit">Desfazer</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="suave">Nenhuma entrada manual.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

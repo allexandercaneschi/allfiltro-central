@@ -1,0 +1,9 @@
+<form method="post" action="/admin/sistema/fontes"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="fid" value="{{ x.id if x else 0 }}">
+  <div class="linha"><div class="campo"><label>Nome</label><input type="text" name="nome" value="{{ x.nome if x else '' }}" required></div>
+    <div class="campo"><label>Formato</label><select name="formato">
+    {% for k, n in [('dominios','Domínios (um por linha)'),('hosts','Arquivo hosts'),('adblock','Adblock (||dominio^)'),('pacote','Pacote com pastas (tar.gz, como a UT1)'),('ips','IPs e faixas')] %}<option value="{{ k }}" {{ 'selected' if x and x.formato == k }}>{{ n }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>A cada (horas)</label><input type="number" name="frequencia_h" min="1" max="168" value="{{ x.frequencia_h if x else 24 }}"></div></div>
+  <div class="campo"><label>URL</label><input type="url" name="url" value="{{ x.url if x else '' }}" required></div>
+  <label class="check"><input type="checkbox" name="ativa" value="1" {{ 'checked' if not x or x.ativa }}> Ativa</label>
+  <button class="botao primario mt" type="submit">Salvar</button>
+</form>

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Fontes{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Fontes</h1><p class="suave mb0">Listas externas baixadas sozinhas. Com erro, a central mantém o último retrato válido.</p></div></div>
+{% for f in fontes %}
+<div class="cartao">
+  <div class="cab"><div><h2 class="mb0">{{ f.nome }} {% if not f.ativa %}<span class="etiqueta">desativada</span>{% endif %}
+    {% if f.ultimo_status.startswith('erro') %}<span class="etiqueta erro">erro</span>{% elif f.ultimo_status %}<span class="etiqueta ok">ok</span>{% endif %}</h2>
+    <p class="suave pequeno mb0 quebra">{{ f.formato }} · a cada {{ f.frequencia_h }} h · {{ f.url }}</p>
+    <p class="suave pequeno mb0">Último download: {{ f.ultimo_download|data }} — {{ f.ultimo_status or 'aguardando' }}</p></div>
+    <form method="post" action="/admin/sistema/fontes/{{ f.id }}/baixar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="botao" type="submit">Baixar agora</button></form>
+  </div>
+  <details><summary>Mapeamento ({{ (maps.get(f.id) or [])|length }})</summary>
+    <table><thead><tr><th>Na fonte</th><th class="num">Domínios</th><th class="num">IPs</th><th>Vai para</th><th></th></tr></thead><tbody>
+    {% for m in maps.get(f.id, []) %}{% set i = idx[f.id].get(m.categoria_origem or '_', {}) %}<tr>
+      <td><code>{{ m.categoria_origem or 'lista inteira' }}</code></td><td class="num">{{ i.get('dominios', 0)|num }}</td><td class="num">{{ i.get('ips', 0)|num }}</td>
+      <td>{{ catnome[m.categoria_id].nome if m.categoria_id in catnome else '?' }}</td>
+      <td class="direita"><form class="inline" method="post" action="/admin/sistema/mapeamentos"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="fonte_id" value="{{ f.id }}"><button class="botao pequeno perigo" name="remover" value="{{ m.id }}" type="submit">Remover</button></form></td></tr>
+    {% endfor %}</tbody></table>
+    {% set usadas = (maps.get(f.id) or [])|map(attribute='categoria_origem')|list %}
+    {% set livres = idx[f.id].keys()|reject('in', usadas)|list %}
+    {% if livres %}<p class="suave pequeno mt">Listas da fonte sem mapeamento: {{ livres|join(', ') }}</p>{% endif %}
+    <form class="linha mt" method="post" action="/admin/sistema/mapeamentos"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="fonte_id" value="{{ f.id }}">
+      <div class="campo"><label>Lista da fonte (vazio = lista inteira)</label><input type="text" name="origem" list="origens{{ f.id }}"><datalist id="origens{{ f.id }}">{% for o in idx[f.id].keys() %}<option value="{{ '' if o == '_' else o }}">{% endfor %}</datalist></div>
+      <div class="campo"><label>Categoria da central</label><select name="categoria">{% for c in cats %}<option value="{{ c.chave }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <button class="botao" type="submit">Mapear</button></form>
+  </details>
+  <details><summary>Editar</summary>{% with x = f %}{% include "admin/_fonte_form.html" %}{% endwith %}</details>
+</div>
+{% endfor %}
+<details class="cartao"><summary>Nova fonte</summary>{% with x = None %}{% include "admin/_fonte_form.html" %}{% endwith %}</details>
+{% endblock %}

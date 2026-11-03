@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · Central de Listas ALL Filtros</title>
+<link rel="icon" href="/static/favicon.ico">
+<link rel="stylesheet" href="/static/estilo.css?v={{ versao_app }}">
+</head>
+<body>
+<div class="centro">
+  <form class="login" method="post" action="/admin/login" autocomplete="off">
+    <img src="/static/logo.png" alt="ALL Tecnologias">
+    <h1>Central de Listas ALL Filtros</h1>
+    {% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
+    <div class="campo"><label for="login">Usuário</label>
+      <input id="login" name="login" type="text" autocomplete="username" autocapitalize="none" required autofocus></div>
+    <div class="campo"><label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="off" required></div>
+    <button class="botao primario" type="submit">Entrar</button>
+    <p class="suave pequeno mt">Em computador de cliente ou de terceiros, não deixe o navegador salvar a senha. A sessão termina ao fechar o navegador ou após 30 minutos sem uso.</p>
+  </form>
+</div>
+</body>
+</html>

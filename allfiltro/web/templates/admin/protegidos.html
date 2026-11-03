@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}Protegidos{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Protegidos</h1><p class="suave mb0">Fontes externas nunca colocam estes itens em categoria nenhuma; só a inclusão manual coloca. <code>*.dominio</code> protege o domínio e todos os subdomínios; <code>dominio</code> protege só ele.</p></div></div>
+<div class="cartao"><form class="linha" method="post" action="/admin/sistema/protegidos"><input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="campo"><label>Domínio, *.domínio, IP ou faixa</label><input type="text" name="valor" required></div>
+  <div class="campo"><label>Motivo</label><input type="text" name="motivo"></div>
+  <button class="botao primario" type="submit">Proteger</button></form></div>
+<div class="cartao rolagem"><table><thead><tr><th>Valor</th><th>Tipo</th><th>Motivo</th><th></th></tr></thead><tbody>
+{% for p in protegidos %}<tr><td><code>{{ p.valor }}</code></td><td class="suave">{{ p.tipo }}</td><td class="suave">{{ p.motivo }}</td>
+  <td class="direita"><form class="inline" method="post" action="/admin/sistema/protegidos"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="botao pequeno perigo" name="remover" value="{{ p.id }}" type="submit">Remover</button></form></td></tr>
+{% endfor %}</tbody></table></div>
+{% endblock %}

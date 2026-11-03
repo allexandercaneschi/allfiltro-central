@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block titulo %}Domínios e IPs{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Domínios e IPs</h1><p class="suave mb0">Digite um site ou IP para ver em quais categorias ele está e de onde veio.</p></div></div>
+<form class="cartao busca" method="get" action="/admin/buscar">
+  <input type="search" name="q" value="{{ q }}" placeholder="ge.globo.com, https://site.com.br/pagina ou 200.1.2.3" autofocus>
+  <button class="botao primario" type="submit">Buscar</button>
+</form>
+{% if erro_busca %}<div class="aviso erro">{{ erro_busca }}</div>{% endif %}
+
+{% if res %}
+<div class="cartao">
+  <div class="resultado-valor quebra">{{ res.valor }}</div>
+  <p class="suave">{{ 'Domínio (vale também para os subdomínios)' if res.tipo == 'dominio' else 'IP / faixa' }} · versão ativa {{ res.versao or '—' }}</p>
+  {% if res.categorias %}
+  <table><thead><tr><th>Está na categoria</th><th>Por causa de</th></tr></thead><tbody>
+  {% for c in res.categorias %}<tr><td><a href="/admin/categorias/{{ c.categoria }}">{{ c.nome }}</a></td><td><code>{{ c.por }}</code>{% if c.por != res.valor %} <span class="suave pequeno">(domínio pai)</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<div class="aviso atencao mb0">Não está em nenhuma categoria da versão ativa.</div>{% endif %}
+</div>
+
+<div class="grade-2">
+  <div class="cartao">
+    <h2>De onde vem</h2>
+    {% if res.fontes %}<table><tbody>{% for f in res.fontes %}<tr><td>{{ f.fonte }}{% if f.origem %} <span class="suave">/ {{ f.origem }}</span>{% endif %}</td><td>→ <code>{{ f.categoria }}</code></td><td><code>{{ f.por }}</code></td></tr>{% endfor %}</tbody></table>
+    {% else %}<p class="suave">Nenhuma fonte externa traz esse valor.</p>{% endif %}
+    {% if res.entradas or res.entradas_pais %}
+    <h2 class="mt">Entradas manuais</h2>
+    <table><tbody>
+    {% for e, c in res.entradas + res.entradas_pais %}<tr>
+      <td><span class="etiqueta {{ 'ok' if e.operacao == 'incluir' else 'erro' }}">{{ e.operacao }}</span> <code>{{ e.valor }}</code> em {{ c.nome if c else '?' }}
+        <div class="suave pequeno">{{ e.autor }} · {{ e.criado_em|data }}{% if e.comentario %} · {{ e.comentario }}{% endif %}{% if not e.ativa %} · desfeita{% endif %}</div></td>
+      <td class="direita">{% if e.ativa %}<form class="inline" method="post" action="/admin/entradas/{{ e.id }}/desfazer"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar" value="/admin/buscar?q={{ res.valor|urlencode }}"><button class="botao pequeno" type="submit">Desfazer</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table>{% endif %}
+  </div>
+  <div class="cartao">
+    <h2>Incluir ou retirar</h2>
+    <form method="post" action="/admin/entradas">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="valores" value="{{ res.valor }}">
+      <input type="hidden" name="voltar" value="/admin/buscar?q={{ res.valor|urlencode }}">
+      <div class="campo"><label>Categoria</label><select name="categoria" required>
+        {% for c in cats %}<option value="{{ c.chave }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Comentário (motivo, chamado, quem pediu)</label><input type="text" name="comentario" maxlength="500"></div>
+      <div class="linha"><button class="botao primario" name="operacao" value="incluir" type="submit">Incluir</button>
+        <button class="botao perigo" name="operacao" value="retirar" type="submit">Retirar</button></div>
+      <p class="suave pequeno mt mb0">Vale para todos os clientes que usam a categoria, na próxima versão (até 1 minuto) e nos firewalls em até 5 minutos.</p>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<details class="cartao">
+  <summary>Importar em massa</summary>
+  <form method="post" action="/admin/entradas" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar" value="/admin/buscar">
+    <div class="linha">
+      <div class="campo"><label>Categoria</label><select name="categoria" required>{% for c in cats %}<option value="{{ c.chave }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Operação</label><select name="operacao"><option value="incluir">Incluir</option><option value="retirar">Retirar</option></select></div>
+    </div>
+    <div class="campo"><label>Domínios ou IPs, um por linha (URLs completas também servem)</label><textarea name="valores"></textarea></div>
+    <div class="linha"><div class="campo"><label>Ou um arquivo .txt</label><input type="file" name="arquivo" accept=".txt,text/plain"></div>
+      <div class="campo"><label>Comentário</label><input type="text" name="comentario" maxlength="500"></div></div>
+    <button class="botao primario" type="submit">Importar</button>
+  </form>
+</details>
+{% endblock %}
