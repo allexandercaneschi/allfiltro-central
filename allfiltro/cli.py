@@ -82,6 +82,8 @@ def main(argv=None):
     c.add_argument("login")
     c.add_argument("nome")
     c.add_argument("--papel", default="admin", choices=["admin", "tecnico"])
+    c.add_argument("--temporaria", action="store_true",
+                   help="aceita qualquer senha, mas obriga a trocar no primeiro login")
     sub.add_parser("gerar-chave")
     sub.add_parser("chave-publica")
     sub.add_parser("status")
@@ -110,18 +112,24 @@ def main(argv=None):
         if senha != getpass.getpass("Repita a senha: "):
             print("as senhas nao conferem")
             return 1
-        erro = senha_fraca(senha)
+        erro = "" if args.temporaria else senha_fraca(senha)
         if erro:
-            print(erro)
+            print(erro + " (ou use --temporaria: troca obrigatoria no primeiro login)")
+            return 1
+        if not senha:
+            print("senha vazia")
             return 1
         with transacao() as s:
             u = s.scalars(select(Usuario).where(Usuario.login == args.login)).first()
             if u:
                 u.senha_hash, u.ativo, u.papel, u.falhas, u.bloqueado_ate = hash_senha(senha), True, args.papel, 0, None
-                print(f"senha de {args.login} trocada")
+                u.trocar_senha = args.temporaria
+                print(f"senha de {args.login} trocada" + (" (temporaria)" if args.temporaria else ""))
             else:
-                s.add(Usuario(login=args.login, nome=args.nome, senha_hash=hash_senha(senha), papel=args.papel))
-                print(f"usuario {args.login} criado ({args.papel})")
+                s.add(Usuario(login=args.login, nome=args.nome, senha_hash=hash_senha(senha), papel=args.papel,
+                              trocar_senha=args.temporaria))
+                print(f"usuario {args.login} criado ({args.papel})"
+                      + (": a senha e temporaria, o painel pede a troca no primeiro login" if args.temporaria else ""))
         return 0
     if args.cmd == "gerar-chave":
         from .assinatura import gerar

@@ -141,6 +141,7 @@ class Usuario(Base):
     ultimo_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ultimo_ip: Mapped[str] = mapped_column(String(64), default="")
     totp_segredo: Mapped[str] = mapped_column(String(64), default="")  # vazio: TOTP ainda nao ligado
+    trocar_senha: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # senha temporaria
     falhas: Mapped[int] = mapped_column(Integer, default=0)
     bloqueado_ate: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ips_vistos: Mapped[list] = mapped_column(JSONB, default=list)

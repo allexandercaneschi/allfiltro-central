@@ -196,6 +196,8 @@ def _exigir(s, request: Request, sistema: bool = False):
     u, ses = auth.sessao_atual(s, request)
     if u is None:
         raise Redirecionar("/admin/login")
+    if u.trocar_senha and request.url.path != "/admin/senha":
+        raise Redirecionar("/admin/senha")
     if sistema:
         if u.papel != "admin":
             raise HTTPException(status_code=403, detail="Só administradores.")
@@ -270,6 +272,37 @@ def sair(request: Request):
     r = RedirectResponse("/admin/login", status_code=303)
     r.delete_cookie(auth.COOKIE, path="/admin")
     return r
+
+
+@app.get("/admin/senha", response_class=HTMLResponse)
+def senha_form(request: Request):
+    with transacao() as s:
+        u, ses = _exigir(s, request)
+        return _pagina(request, "admin/senha.html", u, ses)
+
+
+@app.post("/admin/senha")
+def trocar_senha(request: Request, csrf: str = Form(""), atual: str = Form(""), nova: str = Form(""),
+                 repetir: str = Form("")):
+    from argon2 import PasswordHasher
+    from argon2.exceptions import InvalidHashError, VerificationError
+    with transacao() as s:
+        u, ses = _exigir(s, request)
+        auth.conferir_csrf(ses, csrf)
+        try:
+            PasswordHasher().verify(u.senha_hash, atual)
+        except (VerificationError, InvalidHashError):
+            return _ir("/admin/senha", erro="A senha atual não confere.")
+        if nova != repetir:
+            return _ir("/admin/senha", erro="As senhas novas não conferem.")
+        if nova == atual:
+            return _ir("/admin/senha", erro="A senha nova precisa ser diferente da atual.")
+        erro = auth.senha_fraca(nova)
+        if erro:
+            return _ir("/admin/senha", erro=erro[0].upper() + erro[1:] + ".")
+        u.senha_hash, u.trocar_senha = auth.hash_senha(nova), False
+        auth.auditar(s, request, u.login, "senha_trocada", "usuarios", u.id)
+    return _ir("/admin", msg="Senha trocada.")
 
 
 # ==========================================================================

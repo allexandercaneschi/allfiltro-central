@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}Trocar senha{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Trocar senha</h1>
+  <p class="suave mb0">{% if usuario.trocar_senha %}Sua senha é temporária: troque para continuar usando o painel.{% else %}{{ usuario.nome }} ({{ usuario.login }}){% endif %}</p></div></div>
+<form class="cartao" method="post" action="/admin/senha" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="campo"><label>Senha atual</label><input type="password" name="atual" required autocomplete="current-password"></div>
+  <div class="linha">
+    <div class="campo"><label>Nova senha (12+ caracteres, com maiúsculas, minúsculas e números)</label><input type="password" name="nova" required minlength="12" autocomplete="new-password"></div>
+    <div class="campo"><label>Repita a nova senha</label><input type="password" name="repetir" required minlength="12" autocomplete="new-password"></div>
+  </div>
+  <button class="botao primario" type="submit">Trocar senha</button>
+</form>
+{% endblock %}

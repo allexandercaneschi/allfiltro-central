@@ -19,7 +19,7 @@
     {% for url, nome in sis %}<a href="{{ url }}" class="{{ 'ativo' if caminho.startswith(url) }}">{{ nome }}</a>{% endfor %}
     {% endif %}
   </nav>
-  <div class="quem"><span>{{ usuario.nome }}</span>
+  <div class="quem"><a href="/admin/senha" class="suave" title="Trocar minha senha">{{ usuario.nome }}</a>
     <form method="post" action="/admin/sair"><button class="botao pequeno" type="submit">Sair</button></form>
   </div>
 </header>
