@@ -55,8 +55,9 @@ def landing(request: Request):
     return tpl.TemplateResponse(request, "landing.html", {})
 
 
-@app.get("/saude", response_class=PlainTextResponse)
+@app.api_route("/saude", methods=["GET", "HEAD", "OPTIONS"], response_class=PlainTextResponse)
 def saude():
+    """Checagem de saude (o HAProxy do pfSense usa OPTIONS por padrao)."""
     with transacao() as s:
         v = versao_ativa(s)
     return f"ok versao={v.versao if v else 'nenhuma'}"
