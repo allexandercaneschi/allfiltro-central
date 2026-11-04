@@ -36,7 +36,7 @@ O instalador pede só o que é segredo: a senha do `postgres` (uma vez, para cri
 
 Depois:
 - guarde uma cópia de `/etc/allfiltro/ed25519.pem` no RDM (sem ela, os firewalls não reconhecem uma central reinstalada);
-- no HAProxy: `allfiltros.alltecnologias.com.br` → `http://<IP do LXC>:80`, com as regras abaixo.
+- no HAProxy: `allfiltro.alltecnologias.com.br` → `http://<IP do LXC>:80`, com as regras abaixo.
 
 ## Atualizar
 
@@ -109,14 +109,14 @@ Exemplo de manifesto:
 ```json
 {"categorias":{"esportes":{"descricao":"Sites de esportes e resultados","dominios":{"bytes":1234,"itens":5321,
  "sha256":"…","url":"/api/v1/cat/esportes/dominios.txt.gz"},"ips":{"bytes":20,"itens":0,"sha256":"…",
- "url":"/api/v1/cat/esportes/ips.txt.gz"},"nome":"Esportes","tipo":"publica"}},"central":"https://allfiltros.alltecnologias.com.br",
+ "url":"/api/v1/cat/esportes/ips.txt.gz"},"nome":"Esportes","tipo":"publica"}},"central":"https://allfiltro.alltecnologias.com.br",
  "cliente":null,"formato":1,"gerado_em":"2026-11-03T18:00:00+00:00","versao":42}
 ```
 
 ## HAProxy (sugestão)
 
 ```
-acl allfiltro       hdr(host) -i allfiltros.alltecnologias.com.br
+acl allfiltro       hdr(host) -i allfiltro.alltecnologias.com.br
 acl allf_api        path_beg /api/
 acl allf_login      path /admin/login
 acl allf_sistema    path_beg /admin/sistema

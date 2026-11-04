@@ -23,7 +23,7 @@ class Config:
         self.dados = Path(g.get("dados", "/srv/allfiltro"))
         self.segredo = g.get("segredo", "")  # HMAC das chaves de cliente
         self.chave_privada = Path(g.get("chave_privada", "/etc/allfiltro/ed25519.pem"))
-        self.url_publica = g.get("url_publica", "https://allfiltros.alltecnologias.com.br").rstrip("/")
+        self.url_publica = g.get("url_publica", "https://allfiltro.alltecnologias.com.br").rstrip("/")
         # "xsendfile" (Apache entrega o arquivo) ou "app" (a propria app entrega)
         self.entrega = g.get("entrega", "xsendfile")
         self.cookie_seguro = g.get("cookie_seguro", "sim") != "nao"
