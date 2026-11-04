@@ -90,7 +90,7 @@ dados = $DADOS
 # HMAC das chaves de cliente: trocar invalida todas as chaves ja geradas
 segredo = $SEGREDO
 chave_privada = $ETC/ed25519.pem
-url_publica = https://allfiltro.alltecnologias.com.br
+url_publica = https://allfiltros.alltecnologias.com.br
 entrega = xsendfile
 cookie_seguro = sim
 sessao_min = 30
@@ -142,7 +142,7 @@ systemctl restart allfiltro-app.service
 passo "Apache"
 install -m 644 "$APP/deploy/apache-allfiltro.conf" /etc/apache2/sites-available/allfiltro.conf
 grep -q '^ServerName' /etc/apache2/conf-available/servername.conf 2>/dev/null || {
-    echo "ServerName allfiltro.alltecnologias.com.br" > /etc/apache2/conf-available/servername.conf
+    echo "ServerName allfiltros.alltecnologias.com.br" > /etc/apache2/conf-available/servername.conf
     a2enconf -q servername; }
 a2enmod -q proxy proxy_http headers xsendfile >/dev/null
 a2dissite -q 000-default >/dev/null 2>&1 || true
@@ -160,6 +160,6 @@ passo "Conferencia"
 sleep 2
 curl -fsS http://127.0.0.1/saude && echo
 echo
-echo "Pronto. Painel: http://$(hostname -I | awk '{print $1}')/admin (e https://allfiltro.alltecnologias.com.br/admin pelo HAProxy)"
+echo "Pronto. Painel: http://$(hostname -I | awk '{print $1}')/admin (e https://allfiltros.alltecnologias.com.br/admin pelo HAProxy)"
 echo "A primeira versao das listas sai em alguns minutos (download da UT1). Acompanhe: journalctl -fu allfiltro-worker"
 echo "Chave publica para o pacote ALL Filtros: curl -s http://127.0.0.1/api/v1/chave-publica"
