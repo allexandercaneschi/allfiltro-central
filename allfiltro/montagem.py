@@ -288,6 +288,8 @@ def gerar_versao(s, autor: str = "worker", forcar: bool = False) -> Versao:
         destino = dir_versao(numero)
         if destino.exists():
             shutil.rmtree(destino)
+        # mkdtemp cria com 700: o Apache (X-Sendfile) precisa ler a pasta da versao
+        destino_tmp.chmod(0o755)
         destino_tmp.rename(destino)
     except Exception:
         shutil.rmtree(destino_tmp, ignore_errors=True)
