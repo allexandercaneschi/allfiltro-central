@@ -64,6 +64,7 @@ journalctl -fu allfiltro-app        # painel e API
 | **Fontes** *(sistema)* | URL, formato, frequência, mapeamento lista da fonte → categoria, baixar agora |
 | **Versões** *(sistema)* | Histórico; liberar versão travada; voltar para uma anterior |
 | **Protegidos** *(sistema)* | O que fonte nenhuma pode colocar em categoria |
+| **Pacote** *(sistema)* | Envia o `all-filtros.sh`; canal teste → promover para estável → os firewalls se atualizam de madrugada; canal de cada firewall |
 | **Usuários** / **Auditoria** *(sistema)* | Técnicos e admins; quem fez o quê, quando e de onde |
 
 Técnico: busca, inclui, retira e publica. Admin: também a área de sistema, que só abre das redes de `redes_sistema` (em `/etc/allfiltro/allfiltro.conf`).
@@ -91,6 +92,9 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 | `GET /api/v1/cat/<chave>/dominios.txt.gz` | Domínios da categoria (`?v=N` para uma versão específica) |
 | `GET /api/v1/cat/<chave>/ips.txt.gz` | IPs e faixas |
 | `GET /api/v1/chave-publica` | Chave pública (PEM) — vai embutida no pacote |
+| `GET /api/v1/pacote` | Última versão do pacote ALL Filtros para o canal do firewall (JSON assinado como o manifesto: versão, sha256, url) |
+| `GET /api/v1/pacote/<versão>/all-filtros.sh` | O pacote (X-Sendfile) |
+| `GET /instalar/all-filtros.sh` | Última estável, para a primeira instalação |
 | `GET /api/v1/licenca` | Situação da chave do cliente (assinada como o manifesto): status, validade, firewalls permitidos e se este firewall está aprovado |
 
 Cabeçalhos do pfSense: `Authorization: Bearer ALLF-…` (chave do cliente), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel (Sistema → Clientes).

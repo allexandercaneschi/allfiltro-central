@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block titulo %}Pacote{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Pacote ALL Filtros</h1><p class="suave mb0">Versão enviada aqui vai primeiro para o canal <b>teste</b>; promovida, vai para todos (<b>estável</b>). Os firewalls verificam uma vez por madrugada, conferem a assinatura da central e o sha256, instalam e voltam para a versão anterior se a instalação falhar.</p></div></div>
+
+<div class="grade-2">
+<div class="cartao"><h2>Enviar versão</h2>
+<form method="post" action="/admin/sistema/pacote" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="campo"><label>all-filtros.sh (pasta dist/ do pacote)</label><input type="file" name="arquivo" accept=".sh" required></div>
+  <div class="campo"><label>O que mudou (opcional)</label><textarea name="notas" rows="3" placeholder="Ex.: corrige o bloqueio padrão com a central"></textarea></div>
+  <button class="botao primario mt" type="submit">Enviar para o canal teste</button></form>
+</div>
+<div class="cartao"><h2>Situação</h2>
+  <p class="mb0">Canal teste: <b>{{ ultimo_teste.versao if ultimo_teste else '—' }}</b> · estável: <b>{{ ultimo_estavel.versao if ultimo_estavel else '—' }}</b></p>
+  <p class="suave pequeno">Firewalls por versão instalada: {% for v, n in por_versao|dictsort %}<code>{{ v }}</code> {{ n }}{{ ', ' if not loop.last }}{% endfor %}</p>
+  <h2 class="mt">Primeira instalação</h2>
+  <p class="pequeno mb0">No pfSense novo (Diagnóstico → Prompt de Comando), última estável:</p>
+  <pre class="pequeno">fetch -o /tmp/all-filtros.sh {{ url_publica }}/instalar/all-filtros.sh && sh /tmp/all-filtros.sh install</pre>
+</div>
+</div>
+
+<div class="cartao rolagem"><h2>Versões</h2>
+<table><thead><tr><th>Versão</th><th>Canal</th><th>Enviada</th><th>O que mudou</th><th class="num">Firewalls</th><th></th></tr></thead><tbody>
+{% for p in pacotes %}<tr><td><b>{{ p.versao }}</b><div class="suave pequeno"><code>{{ p.sha256[:12] }}…</code> · {{ (p.tamanho / 1024)|round|int }} KB</div></td>
+  <td><span class="etiqueta {{ {'estavel':'ok','teste':'atencao','retirado':''}[p.canal] }}">{{ p.canal }}</span></td>
+  <td class="suave pequeno">{{ p.enviado_em|data }}<div>{{ p.enviado_por }}</div></td>
+  <td class="pequeno">{{ p.notas }}</td>
+  <td class="num">{{ por_versao.get(p.versao, 0) }}</td>
+  <td class="direita"><form class="inline" method="post" action="/admin/sistema/pacote/{{ p.id }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if p.canal != 'estavel' %}<button class="botao pequeno primario" name="acao" value="promover" type="submit">Promover para estável</button>{% endif %}
+    {% if p.canal == 'retirado' %}<button class="botao pequeno" name="acao" value="teste" type="submit">Voltar ao teste</button>{% endif %}
+    {% if p.canal != 'retirado' %}<button class="botao pequeno perigo" name="acao" value="retirado" type="submit">Retirar</button>{% endif %}</form></td></tr>
+{% else %}<tr><td colspan="6" class="suave">Nenhuma versão enviada ainda.</td></tr>{% endfor %}
+</tbody></table></div>
+
+<div class="cartao rolagem"><h2>Canal de cada firewall</h2>
+<table><thead><tr><th>Firewall</th><th>Cliente</th><th>Pacote</th><th>Visto</th><th>Canal</th></tr></thead><tbody>
+{% for fw in firewalls %}<tr><td>{{ fw.hostname or '—' }}<div class="suave pequeno">{{ fw.firewall_id }}</div></td>
+  <td>{{ fw.cliente_id or '—' }}</td><td>{{ fw.versao_pacote or '—' }}</td><td class="suave pequeno">{{ fw.visto_em|data }}</td>
+  <td><form class="inline" method="post" action="/admin/sistema/firewalls/{{ fw.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="acao" value="canal"><input type="hidden" name="volta" value="/admin/sistema/pacote">
+    <select name="canal">{% for c in ('teste', 'estavel') %}<option value="{{ c }}" {{ 'selected' if fw.canal == c }}>{{ 'teste' if c == 'teste' else 'estável' }}</option>{% endfor %}</select>
+    <button class="botao pequeno" type="submit">Salvar</button></form></td></tr>
+{% else %}<tr><td colspan="5" class="suave">Nenhum firewall consultou a central ainda.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

@@ -49,10 +49,10 @@ timedatectl set-timezone America/Sao_Paulo 2>/dev/null || ln -sf /usr/share/zone
 
 passo "Usuario e pastas"
 id allfiltro >/dev/null 2>&1 || useradd --system --home-dir /opt/allfiltro --shell /usr/sbin/nologin allfiltro
-mkdir -p /opt/allfiltro "$DADOS"/{fontes,versoes,tmp,run} "$ETC"
+mkdir -p /opt/allfiltro "$DADOS"/{fontes,versoes,pacotes,tmp,run} "$ETC"
 chown allfiltro:allfiltro /opt/allfiltro
 chown -R allfiltro:allfiltro "$DADOS"
-chmod 755 "$DADOS" "$DADOS/versoes"       # o Apache le as versoes (X-Sendfile)
+chmod 755 "$DADOS" "$DADOS/versoes" "$DADOS/pacotes"   # o Apache le versoes e pacotes (X-Sendfile)
 chmod 750 "$DADOS/fontes" "$DADOS/tmp" "$DADOS/run"
 chown root:allfiltro "$ETC"; chmod 750 "$ETC"
 

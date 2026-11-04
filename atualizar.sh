@@ -15,6 +15,7 @@ runuser -u allfiltro -- "$VENV/bin/python" -m allfiltro.cli semear
 install -m 644 deploy/allfiltro-app.service deploy/allfiltro-worker.service deploy/allfiltro-worker.timer /etc/systemd/system/
 install -m 644 deploy/apache-allfiltro.conf /etc/apache2/sites-available/allfiltro.conf
 # pastas das versoes legiveis pelo Apache (versoes geradas antes da correcao do mkdtemp)
+install -d -o allfiltro -g allfiltro -m 755 /srv/allfiltro/pacotes
 find /srv/allfiltro/versoes -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec chmod 755 {} +
 systemctl daemon-reload
 systemctl restart allfiltro-app.service

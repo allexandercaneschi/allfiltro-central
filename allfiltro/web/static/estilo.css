@@ -105,3 +105,5 @@ details[open] summary { margin-bottom: 12px; }
 .landing .pontos b { display: block; margin-bottom: 4px; }
 .rodape { color: var(--suave); font-size: 12px; text-align: center; padding: 24px; }
 .mt { margin-top: 14px; } .mb0 { margin-bottom: 0; } .direita { text-align: right; } .quebra { word-break: break-all; }
+pre { background: var(--campo); border: 1px solid var(--borda); border-radius: var(--raio); font-family: var(--mono); padding: 10px 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+input[type=file] { color: inherit; }

@@ -19,7 +19,8 @@ from ..assinatura import assinar_b64, publica_pem
 from ..config import config
 from ..db import transacao
 from ..models import (Assinatura, Auditoria, Categoria, CategoriaCliente, Cliente, Entrada, Firewall, Fonte,
-                      Mapeamento, Protegido, Usuario, Versao)
+                      Mapeamento, Protegido, Usuario, Versao, Pacote)
+from .. import pacotes as pac
 from ..montagem import dir_versao, manifesto_publico, onde_esta_dominio, onde_esta_ip, origens_dominio, versao_ativa
 from ..normaliza import ValorInvalido, dominio as norm_dominio, ip as norm_ip, valor as norm_valor
 from . import auth
@@ -198,6 +199,66 @@ def api_arquivo(chave: str, arquivo: str, request: Request, v: int | None = None
         cab["X-Sendfile"] = str(caminho)
         return Response(b"", media_type="application/gzip", headers=cab)
     return FileResponse(caminho, media_type="application/gzip", headers=cab)
+
+
+def _entregar(caminho: Path, sha: str, request: Request, tipo: str, nome: str = ""):
+    cab = {"ETag": f'"{sha}"', "X-Sha256": sha, "Cache-Control": "no-cache"}
+    if nome:
+        cab["Content-Disposition"] = f'attachment; filename="{nome}"'
+    if request.headers.get("if-none-match") == f'"{sha}"':
+        return Response(status_code=304, headers=cab)
+    if config().entrega == "xsendfile":
+        cab["X-Sendfile"] = str(caminho)
+        return Response(b"", media_type=tipo, headers=cab)
+    return FileResponse(caminho, media_type=tipo, headers=cab)
+
+
+@app.get("/api/v1/pacote")
+def api_pacote(request: Request):
+    """Ultima versao do pacote para o canal deste firewall (assinada como o manifesto)."""
+    with transacao() as s:
+        a = _cliente_da_chave(s, request)
+        fw = _registrar_firewall(s, request, a, None)
+        canal = fw.canal if fw is not None and fw.canal in pac.CANAIS else "estavel"
+        p = pac.ultimo(s, canal)
+        if p is None:
+            return JSONResponse({"erro": "sem_pacote"}, status_code=404)
+        corpo = json.dumps(pac.manifesto(p, canal), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return Response(corpo, media_type="application/json", headers={
+        "Cache-Control": "no-cache", "X-Assinatura-Ed25519": assinar_b64(corpo)})
+
+
+@app.get("/api/v1/pacote/{versao}/all-filtros.sh")
+def api_pacote_arquivo(versao: str, request: Request):
+    with transacao() as s:
+        p = s.scalars(select(Pacote).where(Pacote.versao == versao)).first()
+        if p is None or p.canal == "retirado":
+            raise HTTPException(status_code=404)
+        sha = p.sha256
+    caminho = pac.caminho(versao)
+    if not caminho.exists():
+        raise HTTPException(status_code=404)
+    return _entregar(caminho, sha, request, "text/x-shellscript", "all-filtros.sh")
+
+
+@app.get("/instalar/all-filtros.sh")
+def instalar_pacote(request: Request):
+    """Primeira instalacao: ultima versao estavel (fetch https://.../instalar/all-filtros.sh)."""
+    with transacao() as s:
+        p = pac.ultimo(s, "estavel")
+        if p is None:
+            raise HTTPException(status_code=404)
+        versao, sha = p.versao, p.sha256
+    return _entregar(pac.caminho(versao), sha, request, "text/x-shellscript", "all-filtros.sh")
+
+
+@app.get("/instalar/all-filtros.sh.sha256", response_class=PlainTextResponse)
+def instalar_pacote_sha(request: Request):
+    with transacao() as s:
+        p = pac.ultimo(s, "estavel")
+        if p is None:
+            raise HTTPException(status_code=404)
+        return f"{p.sha256}  all-filtros.sh\n"
 
 
 @app.get("/api/v1/licenca")
@@ -928,9 +989,64 @@ def status_assinatura(aid: int, request: Request, csrf: str = Form(""), status: 
     return _ir(f"/admin/sistema/clientes/{cid}", msg="Assinatura atualizada.")
 
 
+@app.get("/admin/sistema/pacote", response_class=HTMLResponse)
+def pacote_tela(request: Request):
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        ps = sorted(s.scalars(select(Pacote)).all(), key=lambda p: pac.chave_versao(p.versao), reverse=True)
+        fws = s.scalars(select(Firewall).order_by(Firewall.hostname)).all()
+        por_versao = {}
+        for fw in fws:
+            por_versao[fw.versao_pacote or "?"] = por_versao.get(fw.versao_pacote or "?", 0) + 1
+        return _pagina(request, "admin/pacote.html", u, ses, pacotes=ps, firewalls=fws, por_versao=por_versao,
+                       ultimo_teste=pac.ultimo(s, "teste"), ultimo_estavel=pac.ultimo(s, "estavel"),
+                       url_publica=config().url_publica)
+
+
+@app.post("/admin/sistema/pacote")
+async def pacote_enviar(request: Request, csrf: str = Form(""), notas: str = Form(""),
+                        arquivo: UploadFile = File(...)):
+    conteudo = await arquivo.read(pac.TAMANHO_MAX + 1)
+    try:
+        versao = pac.validar(conteudo)
+    except pac.PacoteInvalido as e:
+        return _ir("/admin/sistema/pacote", erro=f"Arquivo recusado: {e}.")
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        if s.scalars(select(Pacote).where(Pacote.versao == versao)).first() is not None:
+            return _ir("/admin/sistema/pacote", erro=f"A versão {versao} já foi enviada. Gere uma versão nova (build.py) para publicar outra correção.")
+        sha = pac.gravar(conteudo, versao)
+        s.add(Pacote(versao=versao, sha256=sha, tamanho=len(conteudo), canal="teste", notas=notas.strip()[:2000],
+                     enviado_por=u.login))
+        auth.auditar(s, request, u.login, "pacote_enviado", "pacotes", versao, depois={"sha256": sha, "canal": "teste"})
+    return _ir("/admin/sistema/pacote", msg=f"Versão {versao} publicada no canal teste. Os firewalls do canal teste instalam na próxima madrugada (ou em Verificar agora, no firewall).")
+
+
+@app.post("/admin/sistema/pacote/{pid}")
+def pacote_acao(pid: int, request: Request, csrf: str = Form(""), acao: str = Form(...)):
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        p = s.get(Pacote, pid)
+        if p is None:
+            raise HTTPException(status_code=404)
+        antes = p.canal
+        if acao == "promover":
+            p.canal, p.promovido_em = "estavel", datetime.now(timezone.utc)
+        elif acao in ("teste", "retirado"):
+            p.canal = acao
+        else:
+            raise HTTPException(status_code=400)
+        auth.auditar(s, request, u.login, "pacote_canal", "pacotes", p.versao, antes={"canal": antes}, depois={"canal": p.canal})
+        versao, canal = p.versao, p.canal
+    nomes = {"estavel": "estável (todos os firewalls)", "teste": "teste", "retirado": "retirada (ninguém mais instala)"}
+    return _ir("/admin/sistema/pacote", msg=f"Versão {versao}: {nomes[canal]}.")
+
+
 @app.post("/admin/sistema/firewalls/{fid}")
 def acao_firewall(fid: int, request: Request, csrf: str = Form(""), acao: str = Form(...),
-                  cliente_id: str = Form("")):
+                  cliente_id: str = Form(""), canal: str = Form(""), volta: str = Form("")):
     with transacao() as s:
         u, ses = _exigir(s, request, sistema=True)
         auth.conferir_csrf(ses, csrf)
@@ -948,6 +1064,12 @@ def acao_firewall(fid: int, request: Request, csrf: str = Form(""), acao: str = 
                 return _ir(voltar, erro="Cliente inválido.")
             fw.cliente_id = cliente_id
             voltar = f"/admin/sistema/clientes/{cliente_id}"
+        elif acao == "canal":
+            if volta == "/admin/sistema/pacote":
+                voltar = volta
+            if canal not in pac.CANAIS:
+                return _ir(voltar, erro="Canal inválido.")
+            fw.canal = canal
         elif acao == "remover":
             s.delete(fw)
         else:

@@ -48,6 +48,10 @@ class Config:
         return self.dados / "versoes"
 
     @property
+    def dir_pacotes(self) -> Path:
+        return self.dados / "pacotes"
+
+    @property
     def dir_tmp(self) -> Path:
         return self.dados / "tmp"
 

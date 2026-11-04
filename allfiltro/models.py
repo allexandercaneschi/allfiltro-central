@@ -116,6 +116,22 @@ class Firewall(Base):
     versao_listas: Mapped[int | None] = mapped_column(Integer)
     ultimo_ip: Mapped[str] = mapped_column(String(64), default="")
     visto_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # canal de atualizacao do pacote ALL Filtros: teste recebe primeiro
+    canal: Mapped[str] = mapped_column(String(10), default="estavel", server_default="estavel")
+
+
+class Pacote(Base):
+    """Versao do pacote ALL Filtros (all-filtros.sh) distribuida pela central."""
+    __tablename__ = "pacotes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    versao: Mapped[str] = mapped_column(String(40), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    tamanho: Mapped[int] = mapped_column(Integer)
+    canal: Mapped[str] = mapped_column(String(10), default="teste")  # teste | estavel | retirado
+    notas: Mapped[str] = mapped_column(Text, default="")
+    enviado_por: Mapped[str] = mapped_column(String(80), default="")
+    enviado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=agora())
+    promovido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Versao(Base):
