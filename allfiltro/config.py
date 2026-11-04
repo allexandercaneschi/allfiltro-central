@@ -30,6 +30,9 @@ class Config:
         self.sessao_min = int(g.get("sessao_min", "30"))
         # webhook do n8n para alertas (login de IP nunca visto); vazio = desligado
         self.alerta_webhook = g.get("alerta_webhook", "")
+        # "desligado": a chave so identifica o cliente (nada e bloqueado por licenca)
+        # "ligado": assinatura suspensa/vencida ou firewall acima do limite nao recebe as privadas
+        self.licenciamento = g.get("licenciamento", "desligado")
 
         # quem pode passar o IP real do cliente em X-Forwarded-For (Apache local + HAProxy)
         self.proxies_confiaveis = _redes(rede.get("proxies_confiaveis", "127.0.0.1/32 ::1/128"))

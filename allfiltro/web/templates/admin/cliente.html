@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block titulo %}{{ c.nome }}{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>{{ c.nome }}</h1><p class="suave mb0"><code>{{ c.cliente_id }}</code>{% if not c.ativo %} · <span class="etiqueta">inativo</span>{% endif %} · licenciamento {{ licenciamento }}</p></div>
+  <a class="botao" href="/admin/sistema/clientes">Todos os clientes</a></div>
+
+{% if chave_nova %}
+<div class="aviso ok"><b>Chave gerada:</b> <code class="resultado-valor">{{ chave_nova }}</code>
+  <p class="mb0 mt">Copie agora e coloque em <b>Serviços → ALL Filtros</b> no firewall do cliente (e guarde no RDM). A central guarda só um resumo dela: esta é a única vez que ela aparece.</p></div>
+{% endif %}
+
+<div class="grade-2">
+<div class="cartao"><h2>Chaves</h2>
+  {% if assinaturas %}<table><thead><tr><th>Chave</th><th>Situação</th><th>Firewalls</th><th></th></tr></thead><tbody>
+  {% for a in assinaturas %}<tr><td><code>ALLF-…{{ a.chave_final }}</code><div class="suave pequeno">{{ a.plano }} · desde {{ a.inicio.strftime('%d/%m/%Y') if a.inicio else '—' }}{% if a.validade %} · até {{ a.validade.strftime('%d/%m/%Y') }}{% endif %} · {{ a.criado_por }}</div></td>
+    <td><span class="etiqueta {{ {'ativa':'ok','suspensa':'atencao','cancelada':'erro'}[a.status] }}">{{ a.status }}</span></td>
+    <td class="num">{{ a.max_firewalls }}</td>
+    <td class="direita">{% if a.status != 'cancelada' %}<details><summary>Alterar</summary>
+      <form method="post" action="/admin/sistema/assinaturas/{{ a.id }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="campo"><label>Firewalls permitidos</label><input type="number" name="max_firewalls" min="1" max="50" value="{{ a.max_firewalls }}"></div>
+        <div class="campo"><label>Validade (vazio = sem)</label><input type="text" name="validade" placeholder="2027-12-31" value="{{ a.validade or '' }}"></div>
+        <div class="linha">{% if a.status == 'ativa' %}<button class="botao pequeno" name="status" value="suspensa" type="submit">Suspender</button>{% else %}<button class="botao pequeno" name="status" value="ativa" type="submit">Reativar</button>{% endif %}
+          <button class="botao pequeno" name="status" value="{{ a.status }}" type="submit">Salvar</button>
+          <button class="botao pequeno perigo" name="status" value="cancelada" type="submit">Cancelar chave</button></div>
+      </form></details>{% endif %}</td></tr>
+  {% endfor %}</tbody></table>{% else %}<p class="suave">Nenhuma chave ainda.</p>{% endif %}
+  <details class="mt"><summary>Gerar chave</summary>
+  <form method="post" action="/admin/sistema/clientes/{{ c.cliente_id }}/chave"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="linha"><div class="campo"><label>Plano</label><input type="text" name="plano" value="padrao"></div>
+      <div class="campo"><label>Firewalls permitidos</label><input type="number" name="max_firewalls" min="1" max="50" value="1"></div>
+      <div class="campo"><label>Validade (opcional)</label><input type="text" name="validade" placeholder="2027-12-31"></div></div>
+    {% if assinaturas|selectattr('status', 'equalto', 'ativa')|list %}<label class="check"><input type="checkbox" name="substituir" value="1" checked> Cancelar a chave ativa atual (troca de chave)</label>{% endif %}
+    <button class="botao primario mt" type="submit">Gerar</button></form></details>
+</div>
+
+<div class="cartao"><h2>Dados</h2>
+<form method="post" action="/admin/sistema/clientes"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="cliente_id" value="{{ c.cliente_id }}">
+  <div class="campo"><label>Nome</label><input type="text" name="nome" value="{{ c.nome }}" required></div>
+  <label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if c.ativo }}> Ativo</label>
+  <button class="botao primario mt" type="submit">Salvar</button></form>
+<h2 class="mt">Categorias privadas</h2>
+{% for p in privadas %}<div><a href="/admin/categorias/{{ p.chave }}">{{ p.nome }}</a> <code class="suave">{{ p.chave }}</code></div>
+{% else %}<p class="suave pequeno mb0">Nenhuma. Crie em Categorias (tipo privada) e marque este cliente.</p>{% endfor %}
+</div>
+</div>
+
+<div class="cartao rolagem"><h2>Firewalls</h2>
+<table><thead><tr><th>Firewall</th><th>Pacote</th><th>Listas</th><th>Visto</th><th>Situação</th><th></th></tr></thead><tbody>
+{% for fw in firewalls %}<tr><td>{{ fw.hostname or '—' }}<div class="suave pequeno">{{ fw.firewall_id }} · {{ fw.ultimo_ip }}</div></td>
+  <td>{{ fw.versao_pacote or '—' }}</td><td>{{ fw.versao_listas or '—' }}</td><td class="suave pequeno">{{ fw.visto_em|data }}</td>
+  <td><span class="etiqueta {{ 'ok' if fw.status == 'aprovado' else 'atencao' }}">{{ fw.status }}</span></td>
+  <td class="direita"><form class="inline" method="post" action="/admin/sistema/firewalls/{{ fw.id }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if fw.status != 'aprovado' %}<button class="botao pequeno primario" name="acao" value="aprovar" type="submit">Aprovar</button>{% endif %}
+    <button class="botao pequeno perigo" name="acao" value="remover" type="submit">Remover</button></form></td></tr>
+{% else %}<tr><td colspan="6" class="suave">Nenhum firewall consultou a central com a chave deste cliente ainda.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

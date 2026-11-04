@@ -16,7 +16,8 @@
 <form method="post" action="/admin/categorias"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="nova" value="1">
   <div class="linha"><div class="campo"><label>Chave (fixa, minúsculas e hífen)</label><input type="text" name="chave" required pattern="[a-z0-9][a-z0-9-]{1,78}" placeholder="bets-brasileiras"></div>
     <div class="campo"><label>Nome</label><input type="text" name="nome" required placeholder="Bets brasileiras"></div></div>
-  <div class="campo"><label>Descrição</label><input type="text" name="descricao"></div>
+  <div class="linha"><div class="campo"><label>Descrição</label><input type="text" name="descricao"></div>
+    <div class="campo"><label>Tipo</label><select name="tipo"><option value="publica">Pública (todos os clientes)</option><option value="privada">Privada (escolho os clientes depois)</option></select></div></div>
   <button class="botao primario" type="submit">Criar</button>
 </form></details>
 {% endblock %}

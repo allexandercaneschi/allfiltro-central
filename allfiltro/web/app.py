@@ -18,8 +18,8 @@ from .. import VERSAO
 from ..assinatura import assinar_b64, publica_pem
 from ..config import config
 from ..db import transacao
-from ..models import (Assinatura, Auditoria, Categoria, Entrada, Firewall, Fonte, Mapeamento, Protegido, Usuario,
-                      Versao)
+from ..models import (Assinatura, Auditoria, Categoria, CategoriaCliente, Cliente, Entrada, Firewall, Fonte,
+                      Mapeamento, Protegido, Usuario, Versao)
 from ..montagem import dir_versao, manifesto_publico, onde_esta_dominio, onde_esta_ip, origens_dominio, versao_ativa
 from ..normaliza import ValorInvalido, dominio as norm_dominio, ip as norm_ip, valor as norm_valor
 from . import auth
@@ -66,13 +66,24 @@ def saude():
 # ==========================================================================
 # API dos pfSense
 # ==========================================================================
+def hash_chave(chave: str) -> str:
+    return hmac.new(config().segredo.encode(), chave.strip().upper().encode(), hashlib.sha256).hexdigest()
+
+
+def gerar_chave() -> str:
+    """ALLF-XXXXX-XXXXX-XXXXX-XXXXX (sem 0/O/1/I para ditar por telefone sem erro)."""
+    import secrets
+    alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    blocos = ["".join(secrets.choice(alfabeto) for _ in range(5)) for _ in range(4)]
+    return "ALLF-" + "-".join(blocos)
+
+
 def _cliente_da_chave(s, request: Request):
-    """Chave do cliente (Authorization: Bearer ALLF-...). Opcional por enquanto."""
+    """Assinatura da chave do cliente (Authorization: Bearer ALLF-...); None sem chave."""
     aut = request.headers.get("authorization", "")
     if not aut.lower().startswith("bearer "):
         return None
-    chave = aut[7:].strip().upper()
-    h = hmac.new(config().segredo.encode(), chave.encode(), hashlib.sha256).hexdigest()
+    h = hash_chave(aut[7:])
     a = s.scalars(select(Assinatura).where(Assinatura.chave_hash == h)).first()
     if a is None:
         raise HTTPException(status_code=401, detail="chave_invalida")
@@ -87,14 +98,35 @@ def _registrar_firewall(s, request: Request, assinatura, versao: int | None):
     if fw is None:
         fw = Firewall(firewall_id=fid, status="aprovado")
         s.add(fw)
+        if assinatura is not None:
+            # firewall novo acima do limite da assinatura fica aguardando aprovacao no painel
+            aprovados = s.scalar(select(func.count()).select_from(Firewall).where(
+                Firewall.cliente_id == assinatura.cliente_id, Firewall.status == "aprovado")) or 0
+            if aprovados >= (assinatura.max_firewalls or 1):
+                fw.status = "aguardando"
     fw.hostname = request.headers.get("x-hostname", "")[:160]
     fw.versao_pacote = request.headers.get("x-pacote-versao", "")[:40]
     fw.ultimo_ip = auth.ip_cliente(request)
     fw.visto_em = datetime.now(timezone.utc)
     if versao is not None:
         fw.versao_listas = versao
-    if assinatura is not None and not fw.cliente_id:
+    if assinatura is not None and fw.cliente_id != assinatura.cliente_id:
         fw.cliente_id = assinatura.cliente_id
+    return fw
+
+
+def _cliente_efetivo(assinatura, fw) -> str | None:
+    """Cliente que recebe as categorias privadas nesta consulta."""
+    if assinatura is None:
+        return None
+    if config().licenciamento != "ligado":
+        return assinatura.cliente_id
+    from datetime import date
+    if assinatura.status != "ativa" or (assinatura.validade and assinatura.validade < date.today()):
+        return None
+    if fw is not None and fw.status != "aprovado":
+        return None
+    return assinatura.cliente_id
 
 
 def _corpo_manifesto(v, cliente_id):
@@ -109,8 +141,8 @@ def api_manifest(request: Request):
         v = versao_ativa(s)
         if v is None:
             return JSONResponse({"erro": "sem_versao"}, status_code=503)
-        _registrar_firewall(s, request, a, None)
-        corpo = _corpo_manifesto(v, a.cliente_id if a and a.status == "ativa" else None)
+        fw = _registrar_firewall(s, request, a, None)
+        corpo = _corpo_manifesto(v, _cliente_efetivo(a, fw))
     etag = '"' + hashlib.sha256(corpo).hexdigest() + '"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
@@ -126,7 +158,9 @@ def api_manifest_sig(request: Request):
         v = versao_ativa(s)
         if v is None:
             return PlainTextResponse("sem_versao", status_code=503)
-        corpo = _corpo_manifesto(v, a.cliente_id if a and a.status == "ativa" else None)
+        fid = request.headers.get("x-firewall-id", "").strip()[:120]
+        fw = s.scalars(select(Firewall).where(Firewall.firewall_id == fid)).first() if fid else None
+        corpo = _corpo_manifesto(v, _cliente_efetivo(a, fw))
     return assinar_b64(corpo) + "\n"
 
 
@@ -145,11 +179,11 @@ def api_arquivo(chave: str, arquivo: str, request: Request, v: int | None = None
         if ver is None or ver.status == "descartada":
             raise HTTPException(status_code=404)
         info = (ver.manifesto or {}).get("categorias", {}).get(chave)
-        cliente = a.cliente_id if a and a.status == "ativa" else None
+        fw = _registrar_firewall(s, request, a, ver.versao)
+        cliente = _cliente_efetivo(a, fw)
         # privada de outro cliente: 404, sem confirmar que existe
         if info is None or (info.get("tipo") == "privada" and cliente not in info.get("clientes", [])):
             raise HTTPException(status_code=404)
-        _registrar_firewall(s, request, a, ver.versao)
         tipo = "dominios" if arquivo.startswith("dominios") else "ips"
         sha = info[tipo]["sha256"]
         numero = ver.versao
@@ -167,8 +201,26 @@ def api_arquivo(chave: str, arquivo: str, request: Request, v: int | None = None
 
 
 @app.get("/api/v1/licenca")
-def api_licenca():
-    return JSONResponse({"erro": "licenciamento_ainda_nao_disponivel"}, status_code=404)
+def api_licenca(request: Request):
+    """Situacao da assinatura do cliente, assinada como o manifesto."""
+    with transacao() as s:
+        a = _cliente_da_chave(s, request)
+        if a is None:
+            return JSONResponse({"erro": "chave_ausente"}, status_code=401)
+        fw = _registrar_firewall(s, request, a, None)
+        c = s.get(Cliente, a.cliente_id)
+        aprovados = s.scalar(select(func.count()).select_from(Firewall).where(
+            Firewall.cliente_id == a.cliente_id, Firewall.status == "aprovado")) or 0
+        dados = {
+            "cliente": a.cliente_id, "nome": c.nome if c else "", "status": a.status, "plano": a.plano,
+            "validade": a.validade.isoformat() if a.validade else None, "max_firewalls": a.max_firewalls,
+            "firewalls_aprovados": aprovados, "firewall": {"id": fw.firewall_id, "status": fw.status} if fw else None,
+            "licenciamento": config().licenciamento, "valida": _cliente_efetivo(a, fw) is not None,
+            "emitida_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+    corpo = json.dumps(dados, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return Response(corpo, media_type="application/json", headers={
+        "Cache-Control": "no-store", "X-Assinatura-Ed25519": assinar_b64(corpo)})
 
 
 # ==========================================================================
@@ -503,19 +555,23 @@ def categoria(chave: str, request: Request):
                          .where(Mapeamento.categoria_id == c.id)).all()
         v = versao_ativa(s)
         info = (v.manifesto.get("categorias", {}).get(chave) if v else None)
+        clientes = s.scalars(select(Cliente).order_by(Cliente.nome)).all()
+        marcados = set(s.scalars(select(CategoriaCliente.cliente_id).where(CategoriaCliente.categoria_id == c.id)))
         return _pagina(request, "admin/categoria.html", u, ses, c=c, ents=ents, maps=maps, info=info,
-                       versao=v)
+                       versao=v, clientes=clientes, marcados=marcados)
 
 
 @app.post("/admin/categorias")
-def salvar_categoria(request: Request, csrf: str = Form(""), chave: str = Form(...), nome: str = Form(...),
-                     descricao: str = Form(""), ativa: str = Form(""), nova: str = Form("")):
+async def salvar_categoria(request: Request, csrf: str = Form(""), chave: str = Form(...), nome: str = Form(...),
+                           descricao: str = Form(""), ativa: str = Form(""), nova: str = Form(""),
+                           tipo: str = Form("publica")):
     import re
+    form = await request.form()
+    clientes_sel = [str(x) for x in form.getlist("clientes")]
+    tipo = "privada" if tipo == "privada" else "publica"
     chave = chave.strip().lower()
     if not re.match(r"^[a-z0-9][a-z0-9-]{1,78}$", chave):
         return _ir("/admin/categorias", erro="Chave inválida: use letras minúsculas, números e hífen.")
-    if chave.startswith("cli-") and nova:
-        return _ir("/admin/categorias", erro="Chaves cli-… são das categorias privadas de clientes (fase 2).")
     with transacao() as s:
         u, ses = _exigir(s, request)
         auth.conferir_csrf(ses, csrf)
@@ -523,18 +579,33 @@ def salvar_categoria(request: Request, csrf: str = Form(""), chave: str = Form(.
         if nova:
             if c is not None:
                 return _ir("/admin/categorias", erro="Já existe uma categoria com essa chave.")
-            c = Categoria(chave=chave, nome=nome.strip()[:120], descricao=descricao.strip(), tipo="publica",
+            c = Categoria(chave=chave, nome=nome.strip()[:120], descricao=descricao.strip(), tipo=tipo,
                           ativa=True)
             s.add(c)
-            auth.auditar(s, request, u.login, "categoria_criada", "categorias", chave, depois={"nome": c.nome})
+            s.flush()
+            auth.auditar(s, request, u.login, "categoria_criada", "categorias", chave,
+                         depois={"nome": c.nome, "tipo": tipo})
             destino = f"/admin/categorias/{chave}"
+            msg = ("Categoria privada criada: marque abaixo os clientes que a recebem." if tipo == "privada"
+                   else "Categoria criada. Vale na próxima versão.")
+            return _ir(destino, msg=msg)
         else:
             if c is None:
                 raise HTTPException(status_code=404)
-            antes = {"nome": c.nome, "descricao": c.descricao, "ativa": c.ativa}
-            c.nome, c.descricao, c.ativa = nome.strip()[:120], descricao.strip(), bool(ativa)
+            antes_cli = sorted(s.scalars(select(CategoriaCliente.cliente_id).where(
+                CategoriaCliente.categoria_id == c.id)))
+            antes = {"nome": c.nome, "descricao": c.descricao, "ativa": c.ativa, "tipo": c.tipo, "clientes": antes_cli}
+            c.nome, c.descricao, c.ativa, c.tipo = nome.strip()[:120], descricao.strip(), bool(ativa), tipo
+            validos = set(s.scalars(select(Cliente.cliente_id)))
+            novos = sorted(set(clientes_sel) & validos) if tipo == "privada" else []
+            for cc in s.scalars(select(CategoriaCliente).where(CategoriaCliente.categoria_id == c.id)).all():
+                if cc.cliente_id not in novos:
+                    s.delete(cc)
+            for cid in set(novos) - set(antes_cli):
+                s.add(CategoriaCliente(categoria_id=c.id, cliente_id=cid))
             auth.auditar(s, request, u.login, "categoria_editada", "categorias", chave, antes=antes,
-                         depois={"nome": c.nome, "descricao": c.descricao, "ativa": c.ativa})
+                         depois={"nome": c.nome, "descricao": c.descricao, "ativa": c.ativa, "tipo": tipo,
+                                 "clientes": novos})
             destino = f"/admin/categorias/{chave}"
     return _ir(destino, msg="Categoria salva. Vale na próxima versão.")
 
@@ -728,3 +799,159 @@ def auditoria(request: Request):
         u, ses = _exigir(s, request, sistema=True)
         regs = s.scalars(select(Auditoria).order_by(Auditoria.id.desc()).limit(300)).all()
         return _pagina(request, "admin/auditoria.html", u, ses, regs=regs)
+
+
+# ==========================================================================
+# Sistema: clientes, chaves (assinaturas) e firewalls
+# ==========================================================================
+def _dados_cliente(s, cid):
+    c = s.get(Cliente, cid)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+    assinaturas = s.scalars(select(Assinatura).where(Assinatura.cliente_id == cid)
+                            .order_by(Assinatura.criado_em.desc())).all()
+    firewalls = s.scalars(select(Firewall).where(Firewall.cliente_id == cid).order_by(Firewall.hostname)).all()
+    privadas = s.scalars(select(Categoria).join(CategoriaCliente, CategoriaCliente.categoria_id == Categoria.id)
+                         .where(CategoriaCliente.cliente_id == cid).order_by(Categoria.nome)).all()
+    return c, assinaturas, firewalls, privadas
+
+
+@app.get("/admin/sistema/clientes", response_class=HTMLResponse)
+def clientes(request: Request):
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        cs = s.scalars(select(Cliente).order_by(Cliente.nome)).all()
+        fws = s.scalars(select(Firewall).order_by(Firewall.visto_em.desc().nulls_last())).all()
+        por_cliente = {}
+        for fw in fws:
+            por_cliente.setdefault(fw.cliente_id, []).append(fw)
+        chaves = dict(s.execute(select(Assinatura.cliente_id, func.count()).where(Assinatura.status == "ativa")
+                                .group_by(Assinatura.cliente_id)).all())
+        return _pagina(request, "admin/clientes.html", u, ses, clientes=cs, por_cliente=por_cliente, chaves=chaves,
+                       sem_cliente=por_cliente.get(None, []), agora=datetime.now(timezone.utc))
+
+
+@app.post("/admin/sistema/clientes")
+def salvar_cliente(request: Request, csrf: str = Form(""), cliente_id: str = Form(...), nome: str = Form(...),
+                   ativo: str = Form(""), novo: str = Form("")):
+    import re
+    cid = cliente_id.strip().lower()
+    if not re.match(r"^[a-z0-9][a-z0-9_-]{1,59}$", cid):
+        return _ir("/admin/sistema/clientes", erro="Id inválido: minúsculas, números, hífen ou _ (o mesmo id do painel de navegação).")
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        c = s.get(Cliente, cid)
+        if novo:
+            if c is not None:
+                return _ir("/admin/sistema/clientes", erro="Já existe um cliente com esse id.")
+            s.add(Cliente(cliente_id=cid, nome=nome.strip()[:160], ativo=True))
+            auth.auditar(s, request, u.login, "cliente_criado", "clientes", cid, depois={"nome": nome.strip()})
+        else:
+            if c is None:
+                raise HTTPException(status_code=404)
+            antes = {"nome": c.nome, "ativo": c.ativo}
+            c.nome, c.ativo = nome.strip()[:160], bool(ativo)
+            auth.auditar(s, request, u.login, "cliente_editado", "clientes", cid, antes=antes,
+                         depois={"nome": c.nome, "ativo": c.ativo})
+    return _ir(f"/admin/sistema/clientes/{cid}", msg="Cliente salvo.")
+
+
+@app.get("/admin/sistema/clientes/{cid}", response_class=HTMLResponse)
+def cliente(cid: str, request: Request):
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        c, assinaturas, firewalls, privadas = _dados_cliente(s, cid)
+        return _pagina(request, "admin/cliente.html", u, ses, c=c, assinaturas=assinaturas, firewalls=firewalls,
+                       privadas=privadas, chave_nova="", licenciamento=config().licenciamento)
+
+
+@app.post("/admin/sistema/clientes/{cid}/chave", response_class=HTMLResponse)
+def nova_chave(cid: str, request: Request, csrf: str = Form(""), plano: str = Form("padrao"),
+               validade: str = Form(""), max_firewalls: int = Form(1), substituir: str = Form("")):
+    """Gera a chave e mostra UMA vez (a central guarda so o hash)."""
+    from datetime import date
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        c, _, _, _ = _dados_cliente(s, cid)
+        val = None
+        if validade.strip():
+            try:
+                val = date.fromisoformat(validade.strip())
+            except ValueError:
+                return _ir(f"/admin/sistema/clientes/{cid}", erro="Validade inválida.")
+        if substituir:
+            for a in s.scalars(select(Assinatura).where(Assinatura.cliente_id == cid,
+                                                        Assinatura.status == "ativa")).all():
+                a.status = "cancelada"
+        chave = gerar_chave()
+        a = Assinatura(cliente_id=cid, chave_hash=hash_chave(chave), chave_final=chave[-4:],
+                       plano=(plano.strip() or "padrao")[:40], inicio=date.today(), validade=val,
+                       status="ativa", max_firewalls=max(1, min(max_firewalls, 50)), criado_por=u.login)
+        s.add(a)
+        auth.auditar(s, request, u.login, "chave_gerada", "assinaturas", cid,
+                     depois={"final": chave[-4:], "plano": a.plano, "validade": validade, "max_firewalls":
+                             a.max_firewalls, "substituiu": bool(substituir)})
+        s.flush()
+        c, assinaturas, firewalls, privadas = _dados_cliente(s, cid)
+        return _pagina(request, "admin/cliente.html", u, ses, c=c, assinaturas=assinaturas, firewalls=firewalls,
+                       privadas=privadas, chave_nova=chave, licenciamento=config().licenciamento)
+
+
+@app.post("/admin/sistema/assinaturas/{aid}")
+def status_assinatura(aid: int, request: Request, csrf: str = Form(""), status: str = Form(...),
+                      max_firewalls: int = Form(0), validade: str = Form("-")):
+    from datetime import date
+    if status not in ("ativa", "suspensa", "cancelada"):
+        raise HTTPException(status_code=400)
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        a = s.get(Assinatura, aid)
+        if a is None:
+            raise HTTPException(status_code=404)
+        if a.status == "cancelada" and status != "cancelada":
+            return _ir(f"/admin/sistema/clientes/{a.cliente_id}", erro="Chave cancelada não volta: gere uma nova.")
+        antes = {"status": a.status, "max_firewalls": a.max_firewalls, "validade": str(a.validade or "")}
+        a.status = status
+        if max_firewalls:
+            a.max_firewalls = max(1, min(max_firewalls, 50))
+        if validade != "-":
+            try:
+                a.validade = date.fromisoformat(validade) if validade.strip() else None
+            except ValueError:
+                return _ir(f"/admin/sistema/clientes/{a.cliente_id}", erro="Validade inválida.")
+        auth.auditar(s, request, u.login, "assinatura_alterada", "assinaturas", aid, antes=antes,
+                     depois={"status": a.status, "max_firewalls": a.max_firewalls, "validade": str(a.validade or "")})
+        cid = a.cliente_id
+    return _ir(f"/admin/sistema/clientes/{cid}", msg="Assinatura atualizada.")
+
+
+@app.post("/admin/sistema/firewalls/{fid}")
+def acao_firewall(fid: int, request: Request, csrf: str = Form(""), acao: str = Form(...),
+                  cliente_id: str = Form("")):
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        fw = s.get(Firewall, fid)
+        if fw is None:
+            raise HTTPException(status_code=404)
+        antes = {"cliente": fw.cliente_id, "status": fw.status}
+        voltar = f"/admin/sistema/clientes/{fw.cliente_id}" if fw.cliente_id else "/admin/sistema/clientes"
+        if acao == "aprovar":
+            fw.status = "aprovado"
+        elif acao == "aguardar":
+            fw.status = "aguardando"
+        elif acao == "vincular":
+            if s.get(Cliente, cliente_id) is None:
+                return _ir(voltar, erro="Cliente inválido.")
+            fw.cliente_id = cliente_id
+            voltar = f"/admin/sistema/clientes/{cliente_id}"
+        elif acao == "remover":
+            s.delete(fw)
+        else:
+            raise HTTPException(status_code=400)
+        auth.auditar(s, request, u.login, f"firewall_{acao}", "firewalls", fw.firewall_id, antes=antes,
+                     depois={"cliente": cliente_id or fw.cliente_id, "status": fw.status})
+    return _ir(voltar, msg="Firewall atualizado.")

@@ -96,6 +96,8 @@ cookie_seguro = sim
 sessao_min = 30
 # webhook do n8n para alerta de login vindo de IP nunca visto (vazio = desligado)
 alerta_webhook =
+# desligado: a chave so identifica o cliente | ligado: chave suspensa/vencida perde as categorias privadas
+licenciamento = desligado
 
 [rede]
 # quem pode informar o IP real do cliente (Apache local + HAProxy do escritorio)

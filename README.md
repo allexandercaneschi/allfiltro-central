@@ -91,9 +91,13 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 | `GET /api/v1/cat/<chave>/dominios.txt.gz` | Domínios da categoria (`?v=N` para uma versão específica) |
 | `GET /api/v1/cat/<chave>/ips.txt.gz` | IPs e faixas |
 | `GET /api/v1/chave-publica` | Chave pública (PEM) — vai embutida no pacote |
-| `GET /api/v1/licenca` | Fase 2 |
+| `GET /api/v1/licenca` | Situação da chave do cliente (assinada como o manifesto): status, validade, firewalls permitidos e se este firewall está aprovado |
 
-Cabeçalhos do pfSense: `Authorization: Bearer <chave>` (opcional por enquanto), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel.
+Cabeçalhos do pfSense: `Authorization: Bearer ALLF-…` (chave do cliente), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel (Sistema → Clientes).
+
+**Clientes e chaves.** Em *Sistema → Clientes* cada cliente ganha uma chave `ALLF-XXXXX-XXXXX-XXXXX-XXXXX`, mostrada uma única vez (a central guarda só o HMAC). Com a chave, o manifesto inclui as **categorias privadas** do cliente: crie em *Categorias* com tipo *privada* e marque os clientes. Sem chave, ou com a chave de outro cliente, a categoria privada não aparece e o arquivo responde 404. Firewall novo acima do limite da assinatura fica *aguardando* aprovação no painel.
+
+**Licenciamento** (`licenciamento` em `/etc/allfiltro/allfiltro.conf`): `desligado` (padrão) — a chave só identifica o cliente; `ligado` — chave suspensa, cancelada ou vencida, ou firewall aguardando, deixa de receber as categorias privadas (as públicas continuam).
 
 Arquivos: um item por linha, minúsculo, LF, UTF-8, gzip determinístico (o mesmo conteúdo sempre tem o mesmo sha256). Domínios sem `www.` e com acento em punycode; IPs como endereço ou CIDR.
 

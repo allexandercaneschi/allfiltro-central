@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Clientes</h1><p class="suave mb0">Cada cliente tem uma chave (<code>ALLF-…</code>) que vai no ALL Filtros do firewall: é ela que diz à central de quem é o firewall e quais categorias privadas ele recebe.</p></div></div>
+<div class="cartao rolagem"><table><thead><tr><th>Cliente</th><th>Id</th><th class="num">Chaves ativas</th><th>Firewalls</th></tr></thead><tbody>
+{% for c in clientes %}{% set fws = por_cliente.get(c.cliente_id, []) %}<tr>
+  <td><a href="/admin/sistema/clientes/{{ c.cliente_id }}">{{ c.nome }}</a>{% if not c.ativo %} <span class="etiqueta">inativo</span>{% endif %}</td>
+  <td><code>{{ c.cliente_id }}</code></td>
+  <td class="num">{% if chaves.get(c.cliente_id) %}{{ chaves.get(c.cliente_id) }}{% else %}<span class="etiqueta atencao">sem chave</span>{% endif %}</td>
+  <td class="pequeno">{% for fw in fws %}<div>{{ fw.hostname or fw.firewall_id }}
+    {% if fw.status != 'aprovado' %}<span class="etiqueta atencao">{{ fw.status }}</span>{% endif %}
+    <span class="suave">· {{ fw.visto_em|data }}</span></div>{% else %}<span class="suave">nenhum ainda</span>{% endfor %}</td></tr>
+{% else %}<tr><td colspan="4" class="suave">Nenhum cliente cadastrado.</td></tr>{% endfor %}
+</tbody></table></div>
+
+{% if sem_cliente %}
+<div class="cartao rolagem"><h2>Firewalls sem cliente</h2>
+<p class="suave pequeno">Consultaram a central sem chave. Vincule a um cliente ou gere a chave do cliente e coloque no firewall.</p>
+<table><tbody>{% for fw in sem_cliente %}<tr><td>{{ fw.hostname or '—' }}<div class="suave pequeno">{{ fw.firewall_id }} · {{ fw.ultimo_ip }} · pacote {{ fw.versao_pacote or '?' }} · {{ fw.visto_em|data }}</div></td>
+  <td class="direita"><form class="linha" method="post" action="/admin/sistema/firewalls/{{ fw.id }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <select name="cliente_id">{% for c in clientes %}<option value="{{ c.cliente_id }}">{{ c.nome }}</option>{% endfor %}</select>
+    <button class="botao pequeno" name="acao" value="vincular" type="submit">Vincular</button>
+    <button class="botao pequeno perigo" name="acao" value="remover" type="submit">Remover</button></form></td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+<details class="cartao"><summary>Novo cliente</summary>
+<form method="post" action="/admin/sistema/clientes"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="novo" value="1">
+  <div class="linha"><div class="campo"><label>Id (o mesmo do painel de navegação; ex.: racional)</label><input type="text" name="cliente_id" required pattern="[a-z0-9][a-z0-9_-]{1,59}"></div>
+    <div class="campo"><label>Nome</label><input type="text" name="nome" required placeholder="Racional Elétrica"></div></div>
+  <button class="botao primario" type="submit">Criar</button></form></details>
+{% endblock %}

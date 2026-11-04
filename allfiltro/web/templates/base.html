@@ -15,7 +15,7 @@
     {% set itens = [("/admin", "Início"), ("/admin/buscar", "Domínios e IPs"), ("/admin/categorias", "Categorias")] %}
     {% for url, nome in itens %}<a href="{{ url }}" class="{{ 'ativo' if caminho == url or (url != '/admin' and caminho.startswith(url)) }}">{{ nome }}</a>{% endfor %}
     {% if pode_sistema %}<span class="sep"></span>
-    {% set sis = [("/admin/sistema/fontes", "Fontes"), ("/admin/sistema/versoes", "Versões"), ("/admin/sistema/protegidos", "Protegidos"), ("/admin/sistema/usuarios", "Usuários"), ("/admin/sistema/auditoria", "Auditoria")] %}
+    {% set sis = [("/admin/sistema/clientes", "Clientes"), ("/admin/sistema/fontes", "Fontes"), ("/admin/sistema/versoes", "Versões"), ("/admin/sistema/protegidos", "Protegidos"), ("/admin/sistema/usuarios", "Usuários"), ("/admin/sistema/auditoria", "Auditoria")] %}
     {% for url, nome in sis %}<a href="{{ url }}" class="{{ 'ativo' if caminho.startswith(url) }}">{{ nome }}</a>{% endfor %}
     {% endif %}
   </nav>
