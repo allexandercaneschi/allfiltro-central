@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}Sites sem categoria{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Sites sem categoria</h1>
+<p class="suave mb0">Sites acessados nos clientes que nenhuma categoria pega, do mais acessado para o menos. Marque e coloque numa categoria: entra na próxima versão das listas e passa a aparecer classificado nos relatórios. Os já classificados saem da lista sozinhos.</p></div></div>
+
+<div class="cartao"><form class="linha" method="get" action="/admin/sem-categoria">
+  <div class="campo"><label>Acessados nos últimos</label><select name="dias" onchange="this.form.submit()">
+    {% for d, n in [(1, "1 dia"), (7, "7 dias"), (30, "30 dias"), (90, "90 dias")] %}<option value="{{ d }}" {{ 'selected' if d == dias }}>{{ n }}</option>{% endfor %}
+  </select></div>
+  <div class="campo"><label>Mostrar</label><select name="ver" onchange="this.form.submit()">
+    <option value="" {{ 'selected' if ver != 'ignorados' }}>Para classificar</option>
+    <option value="ignorados" {{ 'selected' if ver == 'ignorados' }}>Ignorados</option>
+  </select></div>
+  <div class="campo suave">{{ total|num }} site(s) sem categoria no período{% if versao %} · índice da versão {{ versao }}{% else %} · <span class="etiqueta atencao">índice em preparo</span>{% endif %}</div>
+</form></div>
+
+<form method="post" action="/admin/sem-categoria"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="dias" value="{{ dias }}">
+<div class="cartao"><div class="linha">
+  {% if ver != 'ignorados' %}
+  <div class="campo"><label>Categoria para os marcados</label><select name="categoria"><option value="">Escolha…</option>
+    {% for c in cats %}<option value="{{ c.chave }}">{{ c.nome }}{{ ' (privada)' if c.tipo == 'privada' }}</option>{% endfor %}</select></div>
+  <button class="botao primario" type="submit" name="acao" value="classificar">Classificar</button>
+  <button class="botao" type="submit" name="acao" value="ignorar" title="Some da lista (ex.: domínio interno ou de infraestrutura que não precisa de categoria)">Ignorar</button>
+  {% else %}
+  <button class="botao" type="submit" name="acao" value="voltar">Voltar para a lista</button>
+  {% endif %}
+</div></div>
+
+<div class="cartao rolagem"><table><thead><tr>
+  <th><input type="checkbox" title="Marcar todos" onclick="document.querySelectorAll('input[name=d]').forEach(c => c.checked = this.checked)"></th>
+  <th>Site</th><th class="direita">Acessos</th><th>Clientes</th><th>Último acesso</th><th></th></tr></thead><tbody>
+{% for i in sites %}<tr>
+  <td><input type="checkbox" name="d" value="{{ i.dominio }}"></td>
+  <td><code>{{ i.dominio }}</code></td>
+  <td class="direita">{{ i.acessos|num }}</td>
+  <td class="suave">{{ i.clientes|join(', ') }}</td>
+  <td class="suave">{{ i.ultimo_em|data }}</td>
+  <td class="direita"><a class="botao pequeno" href="/admin/buscar?q={{ i.dominio|urlencode }}">Detalhes</a></td>
+</tr>
+{% else %}<tr><td colspan="6" class="suave">Nada aqui no período.</td></tr>
+{% endfor %}</tbody></table></div>
+</form>
+{% endblock %}

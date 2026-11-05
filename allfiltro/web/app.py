@@ -323,6 +323,45 @@ def api_licenca(request: Request):
         "Cache-Control": "no-store", "X-Assinatura-Ed25519": assinar_b64(corpo)})
 
 
+@app.post("/api/v1/classificar")
+async def api_classificar(request: Request):
+    """Categoria dos sites acessados. Corpo: {"dominios": {"dominio": acessos, ...}} (ate 2000).
+    Resposta: {"versao": N, "categorias": {"dominio": ["Nome", ...]}} (lista vazia = sem categoria)."""
+    from ..classificar import MAX_POR_PEDIDO, classificar, registrar_sem_categoria, versao_com_indice
+    try:
+        corpo = await request.json()
+        pedidos = corpo.get("dominios") or {}
+        if isinstance(pedidos, list):
+            pedidos = {d: 1 for d in pedidos}
+        if not isinstance(pedidos, dict):
+            raise ValueError
+    except Exception:
+        return JSONResponse({"erro": "corpo_invalido"}, status_code=400)
+    if len(pedidos) > MAX_POR_PEDIDO:
+        return JSONResponse({"erro": "muitos_dominios", "maximo": MAX_POR_PEDIDO}, status_code=413)
+    doms, original = {}, {}  # normalizado -> acessos; normalizado -> como o firewall mandou
+    for d, n in pedidos.items():
+        try:
+            nd = norm_dominio(str(d))
+        except ValorInvalido:
+            continue
+        doms[nd] = doms.get(nd, 0) + (int(n) if str(n).isdigit() else 1)
+        original.setdefault(nd, []).append(str(d))
+    with transacao() as s:
+        a = _cliente_da_chave(s, request)
+        if a is None:
+            return JSONResponse({"erro": "chave_ausente"}, status_code=401)
+        fw = _registrar_firewall(s, request, a, None)
+        cliente = _cliente_efetivo(a, fw)
+        v = versao_com_indice(s)
+        if v is None:
+            return JSONResponse({"erro": "indice_em_preparo"}, status_code=503)
+        res = classificar(v.versao, v.manifesto or {}, list(doms), cliente)
+        registrar_sem_categoria(s, {d: doms[d] for d, c in res.items() if not c}, a.cliente_id)
+    saida = {o: c for d, c in res.items() for o in original[d]}
+    return JSONResponse({"versao": v.versao, "categorias": saida}, headers={"Cache-Control": "no-store"})
+
+
 # ==========================================================================
 # Painel: apoio
 # ==========================================================================
@@ -620,6 +659,80 @@ def desfazer_entrada(eid: int, request: Request, csrf: str = Form(""), voltar: s
         auth.auditar(s, request, u.login, "entrada_desfeita", "entradas", e.id,
                      antes={"valor": e.valor, "operacao": e.operacao, "categoria_id": e.categoria_id})
     return _ir(voltar, msg="Entrada desfeita. Vale na próxima versão.")
+
+
+# ==========================================================================
+# Sites sem categoria (acessos dos clientes que nenhuma categoria pega)
+# ==========================================================================
+@app.get("/admin/sem-categoria", response_class=HTMLResponse)
+def sem_categoria_tela(request: Request, dias: int = 30, ver: str = ""):
+    from ..classificar import classificar, versao_com_indice
+    from ..models import SemCategoria
+    dias = dias if dias in (1, 7, 30, 90) else 30
+    with transacao() as s:
+        u, ses = _exigir(s, request)
+        desde = datetime.now(timezone.utc) - timedelta(days=dias)
+        q = select(SemCategoria).where(SemCategoria.ultimo_em >= desde)
+        q = q.where(SemCategoria.ignorado.is_(ver == "ignorados"))
+        linhas = s.scalars(q.order_by(SemCategoria.acessos.desc()).limit(400)).all()
+        # o que ja foi classificado (entrou numa categoria) sai da lista
+        v = versao_com_indice(s)
+        ja = {}
+        if v is not None and linhas:
+            ja = {d: c for d, c in classificar(v.versao, v.manifesto or {}, [l.dominio for l in linhas], None).items() if c}
+        nomes = {c.cliente_id: c.nome for c in s.scalars(select(Cliente)).all()}
+        itens = [{"dominio": l.dominio, "acessos": l.acessos, "clientes": [nomes.get(c, c) for c in (l.clientes or [])],
+                  "ultimo_em": l.ultimo_em, "ignorado": l.ignorado} for l in linhas if l.dominio not in ja][:300]
+        cats = s.scalars(select(Categoria).where(Categoria.ativa.is_(True)).order_by(Categoria.nome)).all()
+        total = s.scalar(select(func.count()).select_from(SemCategoria).where(
+            SemCategoria.ultimo_em >= desde, SemCategoria.ignorado.is_(False))) or 0
+        return _pagina(request, "admin/sem_categoria.html", u, ses, sites=itens, cats=cats, dias=dias, ver=ver,
+                       total=total, versao=v.versao if v else None)
+
+
+@app.post("/admin/sem-categoria")
+async def sem_categoria_acao(request: Request):
+    from ..models import SemCategoria
+    form = await request.form()
+    csrf, acao, categoria = form.get("csrf", ""), form.get("acao", ""), form.get("categoria", "")
+    doms = [str(d) for d in form.getlist("d")][:500]
+    voltar = "/admin/sem-categoria" + (f"?dias={form.get('dias')}" if str(form.get("dias", "")).isdigit() else "")
+    if not doms:
+        return _ir(voltar, erro="Marque ao menos um site.")
+    with transacao() as s:
+        u, ses = _exigir(s, request)
+        auth.conferir_csrf(ses, csrf)
+        if acao in ("ignorar", "voltar"):
+            for d in doms:
+                l = s.get(SemCategoria, d)
+                if l is not None:
+                    l.ignorado = acao == "ignorar"
+            auth.auditar(s, request, u.login, f"sem_categoria_{acao}", "sem_categoria", "",
+                         depois={"itens": doms[:200]})
+            return _ir(voltar, msg=f"{len(doms)} site(s) " + ("ignorado(s)." if acao == "ignorar" else "de volta na lista."))
+        cat = s.scalars(select(Categoria).where(Categoria.chave == categoria)).first()
+        if cat is None:
+            return _ir(voltar, erro="Escolha a categoria.")
+        existentes = {e.valor: e for e in s.scalars(select(Entrada).where(
+            Entrada.categoria_id == cat.id, Entrada.tipo == "dominio", Entrada.ativa.is_(True))).all()}
+        criados = 0
+        for d in doms:
+            try:
+                val = norm_dominio(d)
+            except ValorInvalido:
+                continue
+            e = existentes.get(val)
+            if e is not None and e.operacao == "incluir":
+                continue
+            if e is not None:
+                e.ativa = False
+            s.add(Entrada(categoria_id=cat.id, valor=val, tipo="dominio", operacao="incluir",
+                          comentario="classificado em Sites sem categoria", autor=u.login))
+            criados += 1
+        auth.auditar(s, request, u.login, "entrada_incluir", "entradas", cat.chave,
+                     depois={"itens": doms[:200], "total": len(doms), "comentario": "classificado em Sites sem categoria"})
+    return _ir(voltar, msg=f"{criados} site(s) em {cat.nome}. Vale na próxima versão (alguns minutos); "
+                           "os firewalls reclassificam em até 12 horas.")
 
 
 # ==========================================================================

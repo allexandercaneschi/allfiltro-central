@@ -4,7 +4,7 @@ Idempotente: so cria o que falta (nao muda o que o tecnico ja editou).
 """
 from sqlalchemy import select
 
-from .models import Categoria, Fonte, Mapeamento, Protegido
+from .models import Categoria, Entrada, Fonte, Mapeamento, Protegido
 
 UT1_URL = "https://dsi.ut-capitole.fr/blacklists/download/blacklists.tar.gz"
 
@@ -60,6 +60,31 @@ CATEGORIAS = {
     "vagas-emprego": ("Vagas de emprego", "Sites de vagas", "jobsearch"),
     "video-musica": ("Vídeo e música", "YouTube, Netflix, Spotify e outros serviços de streaming", "audio-video"),
     "sistemas-fiscais": ("Sistemas fiscais", "SEFAZ, eSocial, Receita e emissores de nota (só inclusão manual)", None),
+    "servicos-infra": ("Serviços e infraestrutura", "Sistema operacional, nuvem, CDN, antivírus e serviços de rede. "
+                       "Serve para classificar os relatórios: não use em regra de bloqueio", None),
+    "buscadores": ("Buscadores", "Google, Bing e outros sites de busca (só inclusão manual)", None),
+}
+
+# Itens iniciais das categorias de inclusao manual (so quando a categoria e criada:
+# o que o tecnico tirar depois nao volta)
+ENTRADAS_INICIAIS = {
+    "servicos-infra": [
+        "googleapis.com", "gstatic.com", "googleusercontent.com", "gvt1.com", "gvt2.com", "1e100.net",
+        "microsoft.com", "windowsupdate.com", "msftconnecttest.com", "msftncsi.com", "msedge.net", "azureedge.net",
+        "azurefd.net", "azure.com", "windows.com", "windows.net", "microsoftonline.com", "msauth.net", "msftauth.net",
+        "office.net", "microsoftazuread-sso.com", "trafficmanager.net", "digicert.com", "msocsp.com",
+        "apple.com", "icloud.com", "mzstatic.com", "cdn-apple.com", "aaplimg.com",
+        "cloudflare.com", "cloudflare.net", "cloudflare-dns.com", "akamai.net", "akamaized.net", "akamaiedge.net",
+        "edgekey.net", "edgesuite.net", "cloudfront.net", "amazonaws.com", "fastly.net", "fastly.com", "jsdelivr.net",
+        "bitdefender.com", "bitdefender.net", "avast.com", "avcdn.net", "kaspersky.com", "eset.com", "mcafee.com",
+        "sophos.com", "malwarebytes.com", "avira.com", "norton.com",
+        "ntp.br", "ntp.org", "neverssl.com", "detectportal.firefox.com", "mozilla.net", "mozilla.org",
+        "letsencrypt.org", "sectigo.com", "globalsign.com", "pki.goog",
+        "samsung.com", "samsungcloud.com", "xiaomi.com", "miui.com", "android.com",
+        "tacticalrmm.io", "rustdesk.com", "alltecnologias.com.br", "alltecnologias.online",
+    ],
+    "buscadores": ["google.com", "google.com.br", "bing.com", "duckduckgo.com", "yahoo.com", "search.brave.com",
+                   "ecosia.org", "yandex.com"],
 }
 
 # "*.x" = x e todos os subdominios; "x" = so o proprio dominio
@@ -127,13 +152,19 @@ def semear(s) -> list:
             feito.append(f"protegido {valor} substituido")
     s.flush()
     existentes = {c.chave: c for c in s.scalars(select(Categoria)).all()}
+    novas = []
     for chave, (nome, desc, _) in CATEGORIAS.items():
         if chave not in existentes:
             c = Categoria(chave=chave, nome=nome, descricao=desc, tipo="publica", ativa=True)
             s.add(c)
             existentes[chave] = c
+            novas.append(chave)
             feito.append(f"categoria {chave}")
     s.flush()
+    for chave in novas:
+        for d in ENTRADAS_INICIAIS.get(chave, []):
+            s.add(Entrada(categoria_id=existentes[chave].id, valor=d, tipo="dominio", operacao="incluir",
+                          comentario="item inicial da central", autor="semente"))
     # pela URL ou pelo nome: o tecnico pode trocar a URL (espelho) sem duplicar a fonte
     ut1 = s.scalars(select(Fonte).where((Fonte.url == UT1_URL) | Fonte.nome.like("UT1%"))).first()
     if ut1 is None:

@@ -184,3 +184,14 @@ class Auditoria(Base):
     registro: Mapped[str] = mapped_column(String(120), default="")
     antes: Mapped[dict | None] = mapped_column(JSONB)
     depois: Mapped[dict | None] = mapped_column(JSONB)
+
+
+class SemCategoria(Base):
+    """Site acessado nos clientes que nenhuma categoria pega (para classificar no painel)."""
+    __tablename__ = "sem_categoria"
+    dominio: Mapped[str] = mapped_column(String(300), primary_key=True)
+    acessos: Mapped[int] = mapped_column(BigInteger, default=0)
+    clientes: Mapped[list] = mapped_column(JSONB, default=list)
+    primeiro_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=agora())
+    ultimo_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=agora(), index=True)
+    ignorado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

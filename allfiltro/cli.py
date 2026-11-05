@@ -7,6 +7,7 @@
     python -m allfiltro.cli criar-admin LOGIN "Nome"   pede a senha no terminal
     python -m allfiltro.cli gerar-chave      cria o par Ed25519 (se nao existir)
     python -m allfiltro.cli chave-publica    mostra a chave publica (vai no pacote)
+    python -m allfiltro.cli classificar DOM...  categoria de dominios (monta o indice se faltar)
     python -m allfiltro.cli status
 """
 import argparse
@@ -68,6 +69,16 @@ def ciclo(forcar_versao: bool = False, autor: str = "worker") -> int:
     if pedido:
         flag.unlink(missing_ok=True)
 
+    # indice de classificacao (categoria dos sites acessados) da versao ativa
+    try:
+        from .classificar import garantir_indice
+        with transacao() as s:
+            r = garantir_indice(s)
+        if r != "ok":
+            print(f"classificador: {r}")
+    except Exception as ex:
+        print(f"classificador: erro {ex}")
+
     # listas de paises e servicos (aba Paises do ALL Filtros): uma vez por dia
     try:
         from .redes import atualizar as atualizar_redes
@@ -96,6 +107,8 @@ def main(argv=None):
     sub.add_parser("gerar-chave")
     sub.add_parser("chave-publica")
     sub.add_parser("status")
+    cl = sub.add_parser("classificar", help="mostra a categoria de dominios (teste do indice)")
+    cl.add_argument("dominios", nargs="+")
     r = sub.add_parser("redes")
     r.add_argument("--forcar", action="store_true")
     args = ap.parse_args(argv)
@@ -162,6 +175,17 @@ def main(argv=None):
             print(f"  {nome:28} {'ok' if x.get('ok') else 'ERRO ' + x.get('erro', '')}")
         print(f"geracao {er.get('geracao', '-')}, {er.get('listas', 0)} listas, MaxMind {'sim' if er.get('maxmind_usada') else 'nao'}"
               + (f" | {er['erro']}" if er.get("erro") else ""))
+        return 0
+    if args.cmd == "classificar":
+        from .classificar import classificar, garantir_indice, versao_com_indice
+        with transacao() as s:
+            print(garantir_indice(s))
+            v = versao_com_indice(s)
+            if v is None:
+                print("sem indice")
+                return 1
+            for d, cats in classificar(v.versao, v.manifesto or {}, args.dominios, None).items():
+                print(f"{d}: {', '.join(cats) or '(sem categoria)'}")
         return 0
     if args.cmd == "status":
         from .models import Fonte, Versao

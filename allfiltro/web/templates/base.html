@@ -12,7 +12,7 @@
 <header class="topo">
   <a class="marca" href="/admin"><img src="/static/icone.png" alt="">Central de Listas</a>
   <nav>
-    {% set itens = [("/admin", "Início"), ("/admin/buscar", "Domínios e IPs"), ("/admin/categorias", "Categorias")] %}
+    {% set itens = [("/admin", "Início"), ("/admin/buscar", "Domínios e IPs"), ("/admin/categorias", "Categorias"), ("/admin/sem-categoria", "Sem categoria")] %}
     {% for url, nome in itens %}<a href="{{ url }}" class="{{ 'ativo' if caminho == url or (url != '/admin' and caminho.startswith(url)) }}">{{ nome }}</a>{% endfor %}
     {% if pode_sistema %}<span class="sep"></span>
     {% set sis = [("/admin/sistema/clientes", "Clientes"), ("/admin/sistema/pacote", "Pacote"), ("/admin/sistema/paises", "Países"), ("/admin/sistema/fontes", "Fontes"), ("/admin/sistema/versoes", "Versões"), ("/admin/sistema/protegidos", "Protegidos"), ("/admin/sistema/usuarios", "Usuários"), ("/admin/sistema/auditoria", "Auditoria")] %}

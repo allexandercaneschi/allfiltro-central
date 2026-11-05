@@ -50,6 +50,7 @@ runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli status
 runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli publicar     # gera versão agora
 runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli ativar 42    # libera travada / volta versão
 runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli criar-admin LOGIN "Nome"
+runuser -u allfiltro -- /opt/allfiltro/venv/bin/python -m allfiltro.cli classificar www.exemplo.com.br   # categoria de um site
 journalctl -fu allfiltro-worker     # downloads e versões
 journalctl -fu allfiltro-app        # painel e API
 ```
@@ -61,6 +62,7 @@ journalctl -fu allfiltro-app        # painel e API
 | **Início** | Versão ativa, totais, fontes com erro, versões travadas, protegidos barrados, firewalls sem consultar há 48 h. Botão **Publicar agora** |
 | **Domínios e IPs** | Busca um site/IP: em quais categorias está, por causa de qual domínio pai, de qual fonte veio e as entradas manuais. Incluir, retirar, desfazer, importar em massa |
 | **Categorias** | Lista com totais e origens; criar, renomear, desativar |
+| **Sem categoria** | Sites acessados nos clientes que nenhuma categoria pega, do mais acessado para o menos (1, 7, 30 ou 90 dias). Marcar e **Classificar** numa categoria (vira inclusão manual) ou **Ignorar** |
 | **Fontes** *(sistema)* | URL, formato, frequência, mapeamento lista da fonte → categoria, baixar agora |
 | **Versões** *(sistema)* | Histórico; liberar versão travada; voltar para uma anterior |
 | **Protegidos** *(sistema)* | O que fonte nenhuma pode colocar em categoria |
@@ -83,6 +85,15 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 - **Travas:** categoria que cresce ou encolhe mais de 30% **e** mais de 500 itens por mudança de fonte não é ativada; a versão fica *travada*, a anterior continua valendo e o Início mostra o alerta. Entradas manuais não passam por essa trava. A primeira carga de uma categoria vazia também não.
 - **Fonte com erro** (HTTP ≠ 200, vazia, formato estranho) mantém o último retrato válido e tenta de novo a cada 30 min.
 - Uma categoria que não mudou é reaproveitada da versão anterior (hard link), então gerar versão é rápido.
+
+## Classificação dos sites acessados
+
+O pfSense só baixa as categorias que alguma política usa. Para o relatório mostrar a categoria de **todo** site acessado (liberado ou bloqueado, por DNS ou proxy), o coletor do ALL Filtros 2.11+ pergunta à central (`POST /api/v1/classificar`).
+
+- **Índice por versão** (`classificador.idx` na pasta da versão): todos os domínios de todas as categorias num arquivo ordenado, com busca binária. O worker monta no minuto seguinte a cada versão nova (uns 6 s para 6 milhões de domínios, ~120 MB). Enquanto isso a API usa o índice da versão anterior.
+- Vale o **domínio mais específico** (`mail.google.com` antes de `google.com`). Site em mais de uma categoria: vale a privada do cliente, depois a menor categoria (mais específica). Categoria privada só para o cliente dono.
+- **Protegidos** não entram em categoria por fonte, então `google.com`, `googleapis.com`, `microsoft.com`… ficam sem. Por isso a semente cria **Serviços e infraestrutura** (sistema, nuvem, CDN, antivírus) e **Buscadores**, só com inclusões manuais: servem para o relatório, não para bloquear.
+- Sites sem categoria somam acessos na tabela `sem_categoria` (por site: `cdn.loja.com.br` → `loja.com.br`) e aparecem na tela **Sem categoria**. Classificado lá, entra na próxima versão; os firewalls perguntam de novo em até 12 h.
 
 ## Países e serviços (IPs)
 
@@ -109,6 +120,7 @@ Para a aba **Países** do ALL Filtros (entrada pelas WANs só de alguns países)
 | `GET /api/v1/redes` | Listas de IP por país, continente e serviço (aba Países do ALL Filtros), manifesto assinado como o das categorias |
 | `GET /api/v1/redes/<lista>.txt.gz` | Faixas (IPv4 e IPv6, CIDR) de `pais-br`, `continente-eu`, `satelite-proxy`, `servico-microsoft365`... |
 | `GET /api/v1/licenca` | Situação da chave do cliente (assinada como o manifesto): status, validade, firewalls permitidos e se este firewall está aprovado |
+| `POST /api/v1/classificar` | Corpo `{"dominios": {"site": acessos}}` (até 2000, com a chave do cliente). Resposta `{"versao": N, "categorias": {"site": ["Nome", …]}}`, lista vazia = sem categoria |
 
 Cabeçalhos do pfSense: `Authorization: Bearer ALLF-…` (chave do cliente), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel (Sistema → Clientes).
 
