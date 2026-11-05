@@ -6,8 +6,13 @@ set -euo pipefail
 APP=/opt/allfiltro/app
 VENV=/opt/allfiltro/venv
 cd "$APP"
-antes=$(runuser -u allfiltro -- git rev-parse --short HEAD)
-runuser -u allfiltro -- git pull --ff-only -q
+# baixa o codigo novo e roda de novo com a versao nova deste script
+if [ -z "${ALLF_REEXEC:-}" ]; then
+    antes=$(runuser -u allfiltro -- git rev-parse --short HEAD)
+    runuser -u allfiltro -- git pull --ff-only -q
+    ALLF_REEXEC="$antes" exec bash "$APP/atualizar.sh" "$@"
+fi
+antes="$ALLF_REEXEC"
 depois=$(runuser -u allfiltro -- git rev-parse --short HEAD)
 runuser -u allfiltro -- "$VENV/bin/pip" install -q -r requirements.txt
 runuser -u allfiltro -- "$VENV/bin/alembic" -c alembic.ini upgrade head
