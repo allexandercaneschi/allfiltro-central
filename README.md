@@ -64,6 +64,7 @@ journalctl -fu allfiltro-app        # painel e API
 | **Fontes** *(sistema)* | URL, formato, frequência, mapeamento lista da fonte → categoria, baixar agora |
 | **Versões** *(sistema)* | Histórico; liberar versão travada; voltar para uma anterior |
 | **Protegidos** *(sistema)* | O que fonte nenhuma pode colocar em categoria |
+| **Países** *(sistema)* | Conta/chave da MaxMind (testar, salvar, apagar), situação de cada fonte e das listas de países e serviços, atualizar agora |
 | **Pacote** *(sistema)* | Envia o `all-filtros.sh`; canal teste → promover para estável → os firewalls se atualizam de madrugada; canal de cada firewall |
 | **Usuários** / **Auditoria** *(sistema)* | Técnicos e admins; quem fez o quê, quando e de onde |
 
@@ -88,7 +89,7 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 Para a aba **Países** do ALL Filtros (entrada pelas WANs só de alguns países). O worker atualiza uma vez por dia (`/srv/allfiltro/redes`, `python -m allfiltro.cli redes [--forcar]`):
 
 - **Registros oficiais** (LACNIC, ARIN, RIPE, APNIC, AFRINIC): onde o IP foi registrado. Sempre usados, sem chave.
-- **MaxMind GeoLite2-Country**: onde o IP é usado (pega, por exemplo, a Starlink no Brasil), continentes e a lista *proxy anônimo e satélite*. Precisa de conta gratuita: `maxmind_conta` e `maxmind_chave` em `/etc/allfiltro/allfiltro.conf` (o ID da conta e uma chave de licença do painel da MaxMind). Sem elas, só os registros oficiais.
+- **MaxMind GeoLite2-Country**: onde o IP é usado (pega, por exemplo, a Starlink no Brasil), continentes e a lista *proxy anônimo e satélite*. Precisa de conta gratuita: no painel, **Sistema → Países**, informe o *Account ID* e uma *License Key* da MaxMind (**Testar e salvar** confere com a MaxMind antes de gravar; a chave fica em `/srv/allfiltro/redes/maxmind.json`, permissão 600, e não volta a aparecer na tela). Também vale `maxmind_conta`/`maxmind_chave` no `/etc/allfiltro/allfiltro.conf`. Sem elas, só os registros oficiais. **Atualizar agora** na mesma tela refaz as listas no próximo minuto.
 - As duas fontes são **somadas** (um IP do Brasil em qualquer uma conta como Brasil).
 - **Serviços**: faixas publicadas por Microsoft 365, Google, Google Cloud, AWS, Cloudflare e Starlink, para exceções prontas.
 - Fonte com erro mantém o último download bom; lista do Brasil suspeita (quase vazia) não é publicada. A situação aparece no Início do painel.

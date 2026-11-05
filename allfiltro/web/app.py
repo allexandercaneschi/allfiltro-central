@@ -1028,6 +1028,73 @@ def status_assinatura(aid: int, request: Request, csrf: str = Form(""), status: 
     return _ir(f"/admin/sistema/clientes/{cid}", msg="Assinatura atualizada.")
 
 
+@app.get("/admin/sistema/paises", response_class=HTMLResponse)
+def paises_tela(request: Request):
+    from .. import redes
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        e = redes.ler_estado()
+        conta, chave = redes.maxmind_credenciais()
+        m = redes.manifesto_assinado()
+        listas = json.loads(m[0]).get("listas", {}) if m else {}
+        grupos = {"pais": 0, "continente": 0, "servico": [], "satelite": 0}
+        for k, v in listas.items():
+            t = k.split("-", 1)[0]
+            if t == "servico":
+                grupos["servico"].append(v)
+            else:
+                grupos[t] = grupos.get(t, 0) + 1
+        fontes = []
+        for k, x in sorted(e.get("fontes", {}).items()):
+            ok_em = None
+            try:
+                ok_em = datetime.fromisoformat(x["ok_em"]) if x.get("ok_em") else None
+            except ValueError:
+                pass
+            fontes.append({"nome": k, "ok": x.get("ok", False), "erro": x.get("erro", ""), "ok_em": ok_em})
+        return _pagina(request, "admin/paises.html", u, ses, estado=_redes_estado(), fontes=fontes, grupos=grupos,
+                       br=listas.get("pais-br"), conta=conta, tem_chave=bool(chave), pedido=redes.atualizacao_pedida())
+
+
+@app.post("/admin/sistema/paises/maxmind")
+def paises_maxmind(request: Request, csrf: str = Form(""), conta: str = Form(""), chave: str = Form(""),
+                   acao: str = Form("salvar")):
+    from .. import redes
+    conta = conta.strip()
+    chave = chave.strip()
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        atual_conta, atual_chave = redes.maxmind_credenciais()
+        if acao == "apagar":
+            redes.salvar_credenciais("", "")
+            auth.auditar(s, request, u.login, "maxmind_apagada", "redes", "maxmind")
+            return _ir("/admin/sistema/paises", msg="Chave da MaxMind apagada. As listas passam a usar só os registros oficiais.")
+        chave = chave or atual_chave  # campo vazio = manter a chave salva
+        if not conta.isdigit() or not (8 <= len(chave) <= 80) or not all(c.isalnum() or c == "_" for c in chave):
+            return _ir("/admin/sistema/paises", erro="Informe o ID da conta (só números) e a chave de licença da MaxMind.")
+        erro = redes.testar_maxmind(conta, chave)
+        if acao == "testar":
+            return _ir("/admin/sistema/paises", **({"erro": f"Teste: {erro}."} if erro else {"msg": "Teste: a MaxMind aceitou a conta e a chave (nada foi salvo)."}))
+        if erro:
+            return _ir("/admin/sistema/paises", erro=f"Não salvei: {erro}.")
+        redes.salvar_credenciais(conta, chave)
+        redes.pedir_atualizacao()
+        auth.auditar(s, request, u.login, "maxmind_salva", "redes", "maxmind", depois={"conta": conta})
+    return _ir("/admin/sistema/paises", msg="Conta da MaxMind salva e testada. As listas são refeitas com ela no próximo minuto.")
+
+
+@app.post("/admin/sistema/paises/atualizar")
+def paises_atualizar(request: Request, csrf: str = Form("")):
+    from .. import redes
+    with transacao() as s:
+        u, ses = _exigir(s, request, sistema=True)
+        auth.conferir_csrf(ses, csrf)
+        redes.pedir_atualizacao()
+        auth.auditar(s, request, u.login, "redes_atualizar", "redes", "todas")
+    return _ir("/admin/sistema/paises", msg="Pedido registrado: as listas de países e serviços são baixadas e refeitas no próximo minuto.")
+
+
 @app.get("/admin/sistema/pacote", response_class=HTMLResponse)
 def pacote_tela(request: Request):
     with transacao() as s:

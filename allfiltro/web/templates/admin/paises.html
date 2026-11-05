@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Países{% endblock %}
+{% block corpo %}
+<div class="cab"><div><h1>Países e serviços</h1><p class="suave mb0">Listas de IP para a aba <b>Países</b> do ALL Filtros (entrada pelas WANs só de alguns países). Os registros oficiais de IP são sempre usados; com a MaxMind as listas ficam mais precisas (onde o IP é usado de fato, ex.: Starlink no Brasil) e ganham continentes e "proxy anônimo e satélite".</p></div>
+  <form method="post" action="/admin/sistema/paises/atualizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="botao" type="submit"{% if pedido %} disabled{% endif %}>{% if pedido %}Atualização pedida…{% else %}Atualizar agora{% endif %}</button></form></div>
+
+<div class="grade-2">
+<div class="cartao"><h2>MaxMind GeoLite2</h2>
+  <p class="pequeno suave">Conta gratuita em maxmind.com (GeoLite2). No painel deles: <b>Account ID</b> e uma <b>License Key</b> nova (Manage License Keys).</p>
+  <form method="post" action="/admin/sistema/paises/maxmind"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>ID da conta (Account ID)</label><input name="conta" value="{{ conta }}" inputmode="numeric" autocomplete="off"></div>
+    <div class="campo"><label>Chave de licença (License Key)</label><input name="chave" type="password" autocomplete="new-password" placeholder="{{ 'chave salva (deixe vazio para manter)' if tem_chave else '' }}"></div>
+    <div class="mt">
+      <button class="botao primario" name="acao" value="salvar" type="submit">Testar e salvar</button>
+      <button class="botao" name="acao" value="testar" type="submit">Só testar</button>
+      {% if tem_chave %}<button class="botao perigo" name="acao" value="apagar" type="submit">Apagar chave</button>{% endif %}
+    </div>
+  </form>
+  <p class="pequeno mb0 mt">Situação: {% if estado.maxmind == 'ok' %}<span class="etiqueta ok">em uso</span>{% else %}<span class="etiqueta atencao">{{ estado.maxmind }}</span>{% endif %}</p>
+  <p class="pequeno suave mb0">A chave fica num arquivo que só o usuário da central lê (não vai para o banco nem para o GitHub).</p>
+</div>
+<div class="cartao"><h2>Listas publicadas</h2>
+  <p class="mb0">{{ estado.listas }} listas · {{ estado.publicado_em|data if estado.publicado_em else 'ainda não publicadas' }}</p>
+  <p class="pequeno mb0">{{ grupos.pais }} países{% if grupos.continente %} · {{ grupos.continente }} continentes{% endif %}{% if grupos.satelite %} · proxy/satélite{% endif %} · {{ grupos.servico|length }} serviços</p>
+  {% if br %}<p class="pequeno mb0">Brasil: <b>{{ br.itens }}</b> faixas de IP (IPv4 e IPv6)</p>{% endif %}
+  {% if grupos.servico %}<p class="pequeno suave mb0">Serviços: {% for x in grupos.servico|sort(attribute='nome') %}{{ x.nome }} ({{ x.itens }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% if estado.erro %}<div class="aviso atencao">{{ estado.erro }}</div>{% endif %}
+  <p class="pequeno suave mb0 mt">Atualiza sozinho uma vez por dia; fonte com erro mantém o último download bom.</p>
+</div>
+</div>
+
+<div class="cartao rolagem"><h2>Fontes</h2>
+<table><thead><tr><th>Fonte</th><th>Situação</th><th>Último download bom</th></tr></thead><tbody>
+{% for f in fontes %}<tr><td>{{ f.nome }}</td><td>{% if f.ok %}<span class="etiqueta ok">ok</span>{% else %}<span class="etiqueta atencao">erro</span> <span class="pequeno">{{ f.erro }}</span>{% endif %}</td><td class="suave">{{ f.ok_em|data }}</td></tr>
+{% else %}<tr><td colspan="3" class="suave">Ainda não baixadas (o worker baixa no próximo minuto).</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

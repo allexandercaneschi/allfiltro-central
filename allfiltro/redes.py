@@ -114,6 +114,61 @@ def _baixar(url: str, destino: Path, auth: tuple | None = None) -> None:
         raise OSError("arquivo vazio")
 
 
+def _arq_credenciais() -> Path:
+    return dir_redes() / "maxmind.json"
+
+
+def maxmind_credenciais() -> tuple[str, str]:
+    """(conta, chave): as salvas pelo painel (Sistema > Paises) ou as do allfiltro.conf."""
+    try:
+        d = json.loads(_arq_credenciais().read_text())
+        if d.get("conta") and d.get("chave"):
+            return str(d["conta"]), str(d["chave"])
+    except (OSError, ValueError):
+        pass
+    cfg = config()
+    return getattr(cfg, "maxmind_conta", ""), getattr(cfg, "maxmind_chave", "")
+
+
+def salvar_credenciais(conta: str, chave: str) -> None:
+    """Grava conta e chave (arquivo 600, so o usuario da central le). Vazios apagam."""
+    dir_redes().mkdir(parents=True, exist_ok=True)
+    arq = _arq_credenciais()
+    if not conta and not chave:
+        arq.unlink(missing_ok=True)
+        return
+    tmp = arq.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"conta": conta, "chave": chave}, f)
+    os.replace(tmp, arq)
+
+
+def testar_maxmind(conta: str, chave: str) -> str:
+    """'' se a MaxMind aceitou a conta e a chave; senao a mensagem de erro (nao baixa nada)."""
+    req = urllib.request.Request(MAXMIND_URL, headers={
+        "User-Agent": f"ALL-Filtros-Central/{VERSAO}",
+        "Authorization": "Basic " + b64encode(f"{conta}:{chave}".encode()).decode()})
+    try:
+        urllib.request.build_opener(_SemRedirecionar).open(req, timeout=30).close()
+        return "a MaxMind respondeu sem o link de download"
+    except urllib.error.HTTPError as ex:
+        if ex.code in (301, 302, 303, 307, 308):
+            return ""
+        return "conta ou chave recusada pela MaxMind" if ex.code in (401, 403) else f"MaxMind respondeu HTTP {ex.code}"
+    except Exception as ex:
+        return f"sem conexão com a MaxMind: {ex}"
+
+
+def pedir_atualizacao() -> None:
+    dir_redes().mkdir(parents=True, exist_ok=True)
+    (dir_redes() / "forcar").touch()
+
+
+def atualizacao_pedida() -> bool:
+    return (dir_redes() / "forcar").exists()
+
+
 def _vencida(e: dict, nome: str) -> bool:
     x = e.get("fontes", {}).get(nome, {})
     ultima = x.get("tentativa", 0)
@@ -248,6 +303,11 @@ def atualizar(forcar: bool = False) -> dict:
     fontes_dir.mkdir(parents=True, exist_ok=True)
     e = ler_estado()
     e.setdefault("fontes", {})
+    # "Atualizar agora" no painel (Sistema > Paises)
+    pedido = base / "forcar"
+    if pedido.exists():
+        forcar = True
+        pedido.unlink(missing_ok=True)
     baixou = False
     agora = time.time()
 
@@ -272,12 +332,14 @@ def atualizar(forcar: bool = False) -> dict:
 
     for nome, url in RIR.items():
         baixar(f"rir-{nome}", url, fontes_dir / f"rir-{nome}.txt")
-    conta = getattr(cfg, "maxmind_conta", "")
-    chave = getattr(cfg, "maxmind_chave", "")
+    conta, chave = maxmind_credenciais()
+    if conta and chave and e.get("maxmind_conta") != conta:
+        e["fontes"].pop("maxmind", None)  # conta nova: tenta ja
+        e["maxmind_conta"] = conta
     if conta and chave:
         baixar("maxmind", MAXMIND_URL, fontes_dir / "maxmind.zip", (conta, chave))
     else:
-        e["fontes"]["maxmind"] = {"ok": False, "erro": "sem chave (maxmind_conta / maxmind_chave)"}
+        e["fontes"]["maxmind"] = {"ok": False, "erro": "sem chave (Sistema > Países no painel)"}
     for nome, (_, urls, _) in SERVICOS.items():
         for i, url in enumerate(urls.split("\n")):
             baixar(f"servico-{nome}-{i}", url.format(uuid=uuid.uuid4()), fontes_dir / f"servico-{nome}-{i}.txt")
