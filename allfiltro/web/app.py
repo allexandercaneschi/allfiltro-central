@@ -151,6 +151,45 @@ def api_manifest(request: Request):
         "ETag": etag, "Cache-Control": "no-cache", "X-Assinatura-Ed25519": assinar_b64(corpo)})
 
 
+def _redes_estado() -> dict:
+    from .. import redes
+    e = redes.ler_estado()
+    mm = e.get("fontes", {}).get("maxmind", {})
+    com_erro = sorted(k for k, x in e.get("fontes", {}).items() if not x.get("ok") and k != "maxmind")
+    try:
+        pub = datetime.fromisoformat(e["publicado_em"]) if e.get("publicado_em") else None
+    except ValueError:
+        pub = None
+    return {"publicado_em": pub, "listas": e.get("listas", 0), "erro": e.get("erro", ""),
+            "maxmind": "ok" if e.get("maxmind_usada") and mm.get("ok", True) else (mm.get("erro") or "sem chave"),
+            "com_erro": com_erro}
+
+
+@app.get("/api/v1/redes")
+def api_redes(request: Request):
+    """Manifesto das listas de paises e servicos (assinado como o das categorias)."""
+    from .. import redes
+    m = redes.manifesto_assinado()
+    if m is None:
+        return JSONResponse({"erro": "sem_listas"}, status_code=503)
+    corpo, etag = m
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(corpo, media_type="application/json", headers={
+        "ETag": etag, "Cache-Control": "no-cache", "X-Assinatura-Ed25519": assinar_b64(corpo)})
+
+
+@app.get("/api/v1/redes/{nome}.txt.gz")
+def api_redes_lista(nome: str, request: Request):
+    from .. import redes
+    p = redes.caminho_lista(nome)
+    if p is None:
+        raise HTTPException(status_code=404)
+    p = p.resolve()
+    from ..arquivos import sha256 as sha256_arquivo
+    return _entregar(p, sha256_arquivo(p), request, "application/gzip")
+
+
 @app.get("/api/v1/manifest.sig", response_class=PlainTextResponse)
 def api_manifest_sig(request: Request):
     """Assinatura (base64) do mesmo corpo que /api/v1/manifest devolve agora."""
@@ -445,7 +484,7 @@ def inicio(request: Request):
         pendente = config().flag_publicar.exists()
         return _pagina(request, "admin/inicio.html", u, ses, versao=v, travadas=travadas, fontes_erro=fontes_erro,
                        fontes=fontes, sumidos=sumidos, firewalls=firewalls, cats=cats, ultima=ultima,
-                       avisos=(v.avisos if v else []), pendente=pendente)
+                       avisos=(v.avisos if v else []), pendente=pendente, redes_estado=_redes_estado())
 
 
 @app.post("/admin/publicar")

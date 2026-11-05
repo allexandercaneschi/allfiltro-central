@@ -33,6 +33,9 @@ class Config:
         # "desligado": a chave so identifica o cliente (nada e bloqueado por licenca)
         # "ligado": assinatura suspensa/vencida ou firewall acima do limite nao recebe as privadas
         self.licenciamento = g.get("licenciamento", "desligado")
+        # MaxMind GeoLite2 (listas de paises): conta e chave do painel da MaxMind
+        self.maxmind_conta = g.get("maxmind_conta", "").strip()
+        self.maxmind_chave = g.get("maxmind_chave", "").strip()
 
         # quem pode passar o IP real do cliente em X-Forwarded-For (Apache local + HAProxy)
         self.proxies_confiaveis = _redes(rede.get("proxies_confiaveis", "127.0.0.1/32 ::1/128"))

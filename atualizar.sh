@@ -15,7 +15,9 @@ runuser -u allfiltro -- "$VENV/bin/python" -m allfiltro.cli semear
 install -m 644 deploy/allfiltro-app.service deploy/allfiltro-worker.service deploy/allfiltro-worker.timer /etc/systemd/system/
 install -m 644 deploy/apache-allfiltro.conf /etc/apache2/sites-available/allfiltro.conf
 # pastas das versoes legiveis pelo Apache (versoes geradas antes da correcao do mkdtemp)
-install -d -o allfiltro -g allfiltro -m 755 /srv/allfiltro/pacotes
+install -d -o allfiltro -g allfiltro -m 755 /srv/allfiltro/pacotes /srv/allfiltro/redes
+# MaxMind (listas de paises): linhas no allfiltro.conf, vazias ate a conta ser criada
+grep -q '^maxmind_conta' /etc/allfiltro/allfiltro.conf || sed -i '/^licenciamento/a # MaxMind GeoLite2 (listas de paises): conta e chave do painel da MaxMind (vazio = so registros oficiais)\nmaxmind_conta =\nmaxmind_chave =' /etc/allfiltro/allfiltro.conf
 find /srv/allfiltro/versoes -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec chmod 755 {} +
 systemctl daemon-reload
 systemctl restart allfiltro-app.service

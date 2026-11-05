@@ -83,6 +83,16 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 - **Fonte com erro** (HTTP ≠ 200, vazia, formato estranho) mantém o último retrato válido e tenta de novo a cada 30 min.
 - Uma categoria que não mudou é reaproveitada da versão anterior (hard link), então gerar versão é rápido.
 
+## Países e serviços (IPs)
+
+Para a aba **Países** do ALL Filtros (entrada pelas WANs só de alguns países). O worker atualiza uma vez por dia (`/srv/allfiltro/redes`, `python -m allfiltro.cli redes [--forcar]`):
+
+- **Registros oficiais** (LACNIC, ARIN, RIPE, APNIC, AFRINIC): onde o IP foi registrado. Sempre usados, sem chave.
+- **MaxMind GeoLite2-Country**: onde o IP é usado (pega, por exemplo, a Starlink no Brasil), continentes e a lista *proxy anônimo e satélite*. Precisa de conta gratuita: `maxmind_conta` e `maxmind_chave` em `/etc/allfiltro/allfiltro.conf` (o ID da conta e uma chave de licença do painel da MaxMind). Sem elas, só os registros oficiais.
+- As duas fontes são **somadas** (um IP do Brasil em qualquer uma conta como Brasil).
+- **Serviços**: faixas publicadas por Microsoft 365, Google, Google Cloud, AWS, Cloudflare e Starlink, para exceções prontas.
+- Fonte com erro mantém o último download bom; lista do Brasil suspeita (quase vazia) não é publicada. A situação aparece no Início do painel.
+
 ## Contrato com o pfSense
 
 | Requisição | O que faz |
@@ -95,6 +105,8 @@ fontes mapeadas − protegidos − retirados à mão + incluídos à mão
 | `GET /api/v1/pacote` | Última versão do pacote ALL Filtros para o canal do firewall (JSON assinado como o manifesto: versão, sha256, url) |
 | `GET /api/v1/pacote/<versão>/all-filtros.sh` | O pacote (X-Sendfile) |
 | `GET /instalar/all-filtros.sh` | Última estável, para a primeira instalação |
+| `GET /api/v1/redes` | Listas de IP por país, continente e serviço (aba Países do ALL Filtros), manifesto assinado como o das categorias |
+| `GET /api/v1/redes/<lista>.txt.gz` | Faixas (IPv4 e IPv6, CIDR) de `pais-br`, `continente-eu`, `satelite-proxy`, `servico-microsoft365`... |
 | `GET /api/v1/licenca` | Situação da chave do cliente (assinada como o manifesto): status, validade, firewalls permitidos e se este firewall está aprovado |
 
 Cabeçalhos do pfSense: `Authorization: Bearer ALLF-…` (chave do cliente), `X-Firewall-Id`, `X-Pacote-Versao`, `X-Hostname`. Cada consulta atualiza o firewall no painel (Sistema → Clientes).

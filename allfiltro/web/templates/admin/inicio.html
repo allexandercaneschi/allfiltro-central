@@ -39,6 +39,11 @@
     {% for f in fontes %}<tr><td>{{ f.nome }}{% if not f.ativa %} <span class="etiqueta">desativada</span>{% endif %}<div class="suave pequeno">{{ f.ultimo_status or 'aguardando o primeiro download' }}</div></td><td class="suave">{{ f.ultimo_download|data }}</td></tr>
     {% else %}<tr><td colspan="2" class="suave">Nenhuma fonte.</td></tr>{% endfor %}
     </tbody></table>
+    <h2 class="mt">Países e serviços (IPs)</h2>
+    <p class="mb0">{{ redes_estado.listas }} listas · publicadas {{ redes_estado.publicado_em|data if redes_estado.publicado_em else 'ainda não' }}</p>
+    <p class="pequeno mb0">MaxMind: {% if redes_estado.maxmind == 'ok' %}<span class="etiqueta ok">ok</span>{% else %}<span class="etiqueta atencao">{{ redes_estado.maxmind }}</span> <span class="suave">(usando só os registros oficiais)</span>{% endif %}</p>
+    {% if redes_estado.com_erro %}<p class="pequeno suave mb0">Com erro (mantido o último download): {{ redes_estado.com_erro|join(', ') }}</p>{% endif %}
+    {% if redes_estado.erro %}<div class="aviso atencao">{{ redes_estado.erro }}</div>{% endif %}
   </div>
   <div class="cartao">
     <h2>Firewalls sem consultar há mais de 48 h</h2>

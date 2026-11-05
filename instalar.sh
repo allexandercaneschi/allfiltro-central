@@ -49,10 +49,10 @@ timedatectl set-timezone America/Sao_Paulo 2>/dev/null || ln -sf /usr/share/zone
 
 passo "Usuario e pastas"
 id allfiltro >/dev/null 2>&1 || useradd --system --home-dir /opt/allfiltro --shell /usr/sbin/nologin allfiltro
-mkdir -p /opt/allfiltro "$DADOS"/{fontes,versoes,pacotes,tmp,run} "$ETC"
+mkdir -p /opt/allfiltro "$DADOS"/{fontes,versoes,pacotes,redes,tmp,run} "$ETC"
 chown allfiltro:allfiltro /opt/allfiltro
 chown -R allfiltro:allfiltro "$DADOS"
-chmod 755 "$DADOS" "$DADOS/versoes" "$DADOS/pacotes"   # o Apache le versoes e pacotes (X-Sendfile)
+chmod 755 "$DADOS" "$DADOS/versoes" "$DADOS/pacotes" "$DADOS/redes"   # o Apache le versoes e pacotes (X-Sendfile)
 chmod 750 "$DADOS/fontes" "$DADOS/tmp" "$DADOS/run"
 chown root:allfiltro "$ETC"; chmod 750 "$ETC"
 
@@ -98,6 +98,9 @@ sessao_min = 30
 alerta_webhook =
 # desligado: a chave so identifica o cliente | ligado: chave suspensa/vencida perde as categorias privadas
 licenciamento = desligado
+# MaxMind GeoLite2 (listas de paises): conta e chave do painel da MaxMind (vazio = so registros oficiais)
+maxmind_conta =
+maxmind_chave =
 
 [rede]
 # quem pode informar o IP real do cliente (Apache local + HAProxy do escritorio)

@@ -67,6 +67,15 @@ def ciclo(forcar_versao: bool = False, autor: str = "worker") -> int:
             print("nada mudou")
     if pedido:
         flag.unlink(missing_ok=True)
+
+    # listas de paises e servicos (aba Paises do ALL Filtros): uma vez por dia
+    try:
+        from .redes import atualizar as atualizar_redes
+        er = atualizar_redes()
+        if er.get("erro"):
+            print(f"redes: {er['erro']}")
+    except Exception as ex:  # nunca derruba o ciclo das categorias
+        print(f"redes: erro {ex}")
     return 0
 
 
@@ -87,6 +96,8 @@ def main(argv=None):
     sub.add_parser("gerar-chave")
     sub.add_parser("chave-publica")
     sub.add_parser("status")
+    r = sub.add_parser("redes")
+    r.add_argument("--forcar", action="store_true")
     args = ap.parse_args(argv)
 
     if args.cmd == "ciclo":
@@ -143,6 +154,14 @@ def main(argv=None):
     if args.cmd == "chave-publica":
         from .assinatura import publica_pem
         print(publica_pem(), end="")
+        return 0
+    if args.cmd == "redes":
+        from .redes import atualizar as atualizar_redes
+        er = atualizar_redes(forcar=args.forcar)
+        for nome, x in sorted(er.get("fontes", {}).items()):
+            print(f"  {nome:28} {'ok' if x.get('ok') else 'ERRO ' + x.get('erro', '')}")
+        print(f"geracao {er.get('geracao', '-')}, {er.get('listas', 0)} listas, MaxMind {'sim' if er.get('maxmind_usada') else 'nao'}"
+              + (f" | {er['erro']}" if er.get("erro") else ""))
         return 0
     if args.cmd == "status":
         from .models import Fonte, Versao
